@@ -4,7 +4,7 @@
 
 Discover motion graphics templates for launches, changelogs and updates inside your coding agent. Preview them in a grid, pick one, and your agent customizes it from your repo.
 
-![A grid of four autoplaying template previews in Codex, with one selected](picker.png)
+[![Demo: a coding agent finds launch video templates, the user picks one, and the agent fills it from the repo](demo.gif)](demo.mp4)
 
 ## Install
 
