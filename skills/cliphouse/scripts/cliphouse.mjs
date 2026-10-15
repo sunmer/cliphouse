@@ -270,9 +270,9 @@ async function preview(args) {
   if (result.isError) die(`props rejected: ${result.text}`);
   const data = JSON.parse(result.text);
   let local = null;
-  // Cache the poster only when it is served from <origin>/previews/ with a plain file name.
-  const name = typeof data.poster === 'string' && data.poster.startsWith(`${ORIGIN}/previews/`) ? data.poster.split('/').pop() : '';
-  if (/^[A-Za-z0-9._-]{1,120}\.(jpg|jpeg|png|webp)$/.test(name)) {
+  // Cache the poster only when it is a personalized poster from <origin>/p/<sha256>.jpg.
+  const name = typeof data.poster === 'string' && data.poster.startsWith(`${ORIGIN}/p/`) ? data.poster.split('/').pop() : '';
+  if (/^[a-f0-9]{64}\.jpg$/.test(name)) {
     local = join(CACHE, `custom-${name}`);
     mkdirSync(CACHE, {recursive: true});
     if (result.image?.data) writeFileSync(local, Buffer.from(result.image.data, 'base64'));
