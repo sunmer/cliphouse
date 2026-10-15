@@ -74,7 +74,7 @@ In Codex, type `$cliphouse` to call the skill directly.
 
 | In the demo | Status |
 | --- | --- |
-| Template grid in the chat, click or number to pick | Available |
+| Template grid in the chat that already shows your product, reply with a number to pick | Available |
 | Filling the template from your repo, and editing it by prompt | Available. You get a cliphou.se editor link, where you export the MP4. |
 | A preview of your own product in the picked template | Available as a poster image. An animated preview is coming. |
 | Previews that turn into your product inside the grid | Coming soon. Today the grid shows each template's demo copy. |
@@ -94,7 +94,7 @@ In Codex, type `$cliphouse` to call the skill directly.
 | Command | Does |
 | --- | --- |
 | `search "<query>" [--aspect 9:16] [--max-seconds 20] [--inline]` | Finds templates. `--inline` caches the preview MP4s and prints a Markdown grid. |
-| `picker <id>... --out <file.html>` | Builds the clickable, autoplaying preview grid for Codex. |
+| `tailor <id>... --brand <brand.json>` | Renders up to 4 templates with your brand in one server call, writes `cliphouse/<id>.props.json` for each, and prints a Markdown grid of the posters. |
 | `spec <id>` | Prints the editable text, colors, and limits. |
 | `preview <id> <props.json>` | Renders a poster of your product in the template on the server, and prints the editor link. |
 | `link <id> <props.json>` | Validates the edit and prints a cliphou.se editor link. |
