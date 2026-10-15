@@ -8,6 +8,9 @@ import {join} from 'node:path';
 const ORIGIN = (process.env.CLIPHOUSE_ORIGIN || 'https://cliphou.se').replace(/\/$/, '');
 const ASPECTS = ['16:9', '9:16', '4:5', '1:1'];
 const ID = /^[a-z0-9-]{1,100}$/;
+// Codex visualization reference. The renderer needs the private-use delimiters
+// U+E200 (start), U+E202 (separator), and U+E201 (end); plain text is not rendered.
+const vizRef = (path) => '\uE200visualize\uE202' + JSON.stringify({path}) + '\uE201';
 
 // Query words that should also match catalog vocabulary.
 const SYNONYMS = {
@@ -126,7 +129,8 @@ ${tiles.join('\n')}
 </script>
 `;
   writeFileSync(out, html);
-  console.log(JSON.stringify({file: out, bytes: Buffer.byteLength(html), reference: `visualize{"path":"${out}"}`}));
+  console.log(JSON.stringify({file: out, bytes: Buffer.byteLength(html), reference: vizRef(out)}));
+  console.log(vizRef(out));
 }
 
 // Prefer the structured catalog. Older deploys only have llms.txt, so parse that instead.
@@ -298,10 +302,11 @@ async function preview(args) {
 <div class="ch-row"><span class="ch-title">${esc(title)}</span><a href="${esc(data.editor)}" target="_blank" rel="noopener">Open in editor</a></div>
 </div>
 `);
-    reference = `visualize{"path":"${out}"}`;
+    reference = vizRef(out);
   }
   console.log(JSON.stringify({poster: data.poster, local, editor: data.editor, video: data.video ?? null, markdown, reference,
     message: data.message, seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
+  if (reference) console.log(reference);
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
