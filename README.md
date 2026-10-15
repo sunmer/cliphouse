@@ -106,7 +106,7 @@ What the default skill does not do:
 - It does not download source packages into your repo.
 - It does not open your browser on its own.
 
-It caches preview files only from `https://cliphou.se/previews/`, in `~/.cache/cliphouse`. Set `CLIPHOUSE_ORIGIN` to use another host.
+It caches stock previews only from `https://cliphou.se/previews/` and personalized posters only from `https://cliphou.se/p/<hash>.jpg`, in `~/.cache/cliphouse`. Set `CLIPHOUSE_ORIGIN` to use another host.
 
 In the Codex picker, a click on a tile sends one fixed message: `$cliphouse: use template <id> and fill it for this project`. It is sent only on your click, and the id must match `^[a-z0-9-]+$`.
 

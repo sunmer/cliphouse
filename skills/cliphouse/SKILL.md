@@ -12,7 +12,7 @@ Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the
 What the helper does:
 
 - It reads public data from `https://cliphou.se` over HTTPS: the MCP server at `/mcp`, the template specs, and the previews.
-- It caches preview files and personalized posters only from `https://cliphou.se/previews/`, in `~/.cache/cliphouse`.
+- It caches stock previews only from `https://cliphou.se/previews/` and personalized posters only from `https://cliphou.se/p/<hash>.jpg`, in `~/.cache/cliphouse`.
 - It writes only the file you name with `--out`, and a temporary picks page. It never runs other programs, installs packages, or opens apps.
 
 ## Workflow
