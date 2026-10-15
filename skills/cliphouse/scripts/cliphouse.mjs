@@ -251,12 +251,17 @@ async function preview(args) {
   const props = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
   const started = Date.now();
   let result;
-  try { result = await mcp('render_preview', {variantId: id, props, searchId: lastSearch()}, 40_000); }
+  try {
+    result = await mcp('render_preview', {variantId: id, props, searchId: lastSearch()}, 40_000);
+    // Servers without render_preview answer with a tool error. Fall back to the editor link.
+    if (result.isError && /not found|unknown tool/i.test(result.text)) throw new Error('render_preview not found');
+  }
   catch (e) {
-    if (e.status === 429 || /abort|timed out/i.test(e.message)) {
+    if (e.status === 429 || /abort|timed out|not found|unknown tool/i.test(e.message)) {
       // The editor link still shows the filled video, so the flow continues without a poster.
       const fallback = await mcp('build_edit_link', {variantId: id, props, searchId: lastSearch()}).catch(() => null);
-      if (!fallback || fallback.isError) die(e.message);
+      if (!fallback) die(e.message);
+      if (fallback.isError) die(`props rejected: ${fallback.text}`);
       console.log(JSON.stringify({poster: null, local: null, editor: JSON.parse(fallback.text).url, message: 'The preview is not available. Open the editor link to see the video.'}, null, 2));
       return;
     }
