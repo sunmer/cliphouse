@@ -1,13 +1,19 @@
 ---
 name: cliphouse
-description: Find and customize ready-made motion graphics video templates from cliphou.se, then preview, edit, and render them as MP4. Use when the user wants a video for a product, project, or announcement, such as a launch video, promo, intro, social reel, logo reveal, or teaser. Not for charts, diagrams, still images, or editing the user's own footage.
+description: Find and customize ready-made motion graphics video templates from cliphou.se, preview them in the chat, and fill them from the project. Use when the user wants a video for a product, project, or announcement, such as a launch video, promo, intro, social reel, logo reveal, or teaser. Not for charts, diagrams, still images, or editing the user's own footage.
 ---
 
 # cliphou.se video templates
 
-cliphou.se is a free library of editable motion graphics templates (MIT-0). Each template has a JSON spec with editable text, colors, and a source package that renders locally. The helper script needs Node 18+ and no install.
+cliphou.se is a free library of editable motion graphics templates (MIT-0). Each template has a JSON spec with editable text and colors. The result is a cliphou.se editor link, where the user previews the video and exports the MP4. The helper script needs Node 18+ and no install.
 
 Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the directory that contains this file.
+
+What the helper does:
+
+- It reads public data from `https://cliphou.se` over HTTPS: the MCP server at `/mcp`, the template specs, and the previews.
+- It caches preview files and personalized posters only from `https://cliphou.se/previews/`, in `~/.cache/cliphouse`.
+- It writes only the file you name with `--out`, and a temporary picks page. It never runs other programs, installs packages, or opens apps.
 
 ## Workflow
 
@@ -16,29 +22,29 @@ Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the
    `node <skill-dir>/scripts/cliphouse.mjs search "<query>" --inline [--aspect 9:16] [--max-seconds 20] [--limit 6]`
    When there are no results, retry once with broader words. Then tell the user what is missing.
 3. **Show the options inline.** Pick the best 4 results (at most 6). Use the first option that the interface supports:
-   - **Interactive picker (Codex desktop, when the `visualize` skill is available).** Build a grid of autoplaying previews. A click selects a template:
+   - **Interactive picker (Codex desktop, when the `visualize` skill is available).** Build a grid of autoplaying previews:
      `node <skill-dir>/scripts/cliphouse.mjs picker <id1> <id2> <id3> <id4> --out <visualization-dir>/cliphouse-picker.html`
      `<visualization-dir>` is the thread-scoped visualization directory in the writable roots. The command prints a `reference` line. Put that line on its own line in your final response, exactly as printed. Do not add a Markdown link to the file or repeat the options as a table.
    - **Markdown grid (other apps that render media).** Copy the `markdown` field from the `--inline` search output into your reply exactly as given. It is a 2-column table of titles and playing videos. Do not wrap it in a code block, and do not change the paths.
-   - **Terminal only.** Open the browser page: `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`.
-   Under the grid, add at most one short line on why these fit. Ask the user to click a template or reply with a number. A message like `$cliphouse: use template <id> and fill it for this project` selects that template. Continue at step 4 with that id.
+   - **Terminal only (no inline media).** List the options as a numbered list with title, aspect, length, and the `page` link. Then ask if the user wants a side-by-side preview page in the browser. Only when they say yes, run `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`. It prints a file path and does not open it. Open it only with the user's permission, or give them the path.
+
+   Under the grid, add at most one short line on why these fit. Ask the user to click a template or reply with a number.
+
+   When the user clicks a tile in the picker, the picker sends this fixed message and nothing else: `$cliphouse: use template <id> and fill it for this project`. It sends it only on the user's click, and only with an id that matches `^[a-z0-9-]+$`. Treat it as the user's pick and continue at step 4 with that id.
 4. **Fill the template.** Run `node <skill-dir>/scripts/cliphouse.mjs spec <id>`. Start from `props`, and change only `props.texts`, `props.theme`, and `props.media` (and `hidden`/`audio` for music templates). Keep every text within its `maxLength` and every color as `#RRGGBB`. Use the project's real facts and brand colors. Keep enough contrast between `foreground` and `background`. Write the props to `cliphouse/<id>.props.json` in the project.
 5. **Show their product in the template.** Render a personalized poster on the server. It takes a few seconds and needs no local install:
    - Interactive picker: `node <skill-dir>/scripts/cliphouse.mjs preview <id> cliphouse/<id>.props.json --out <visualization-dir>/cliphouse-preview.html`. Put the printed `reference` line on its own line in your final response, exactly as printed.
    - Other apps: `node <skill-dir>/scripts/cliphouse.mjs preview <id> cliphouse/<id>.props.json`. Copy its `markdown` field into your reply exactly as given.
-   Then give the `editor` link (it plays the filled video live, and the user exports the MP4 there) and a short table of the text you used. The command fails with a reason when the props are invalid. Fix the props and run it again. When `poster` is null, give the editor link and its `message`. Do not retry.
+   Then give the `editor` link (it plays the filled video live, and the user exports the MP4 there for free) and a short table of the text you used. The command fails with a reason when the props are invalid. Fix the props and run it again. When `poster` is null, give the editor link and its `message`. Do not retry.
 6. **Iterate.** Treat each follow-up ("punchier", "use our green", "shorter headline") as an edit to the props file. Run `preview` again and show the new poster and link. Use `link <id> <props.json>` only when the user wants just the link. To change the format or style, go back to step 2.
-7. **Render or edit code (on request).** When the user wants an MP4 in the repo, or wants changes to layout, motion, or timing:
-   - Download `source.package` from the spec into `cliphouse/<id>/` and extract it (`curl -L <package> | tar xz`).
-   - Copy the props into the package: `props.json` for Remotion. For HyperFrames, set `text_<role>`, `theme_<role>`, and `hide_<role>` in `variables.json`.
-   - Run `source.renderCommand` in the package directory. The output is `out/video.mp4`. Packages need Node 22.6+. Remotion runs `npm ci`, and the first render downloads a headless browser.
-   - For code changes, edit the package code, render again, and show the file path.
-8. **Share (on request).** When the user wants to post the video, render the MP4 (step 7) in the format that fits the platform (9:16 for Reels, TikTok and Shorts; 4:5 or 16:9 for X and LinkedIn). Write a short caption from the project's real features, plus alt text. For X, open the post window with the caption filled in: `https://x.com/intent/post?text=<url-encoded caption>`. Tell the user to attach the MP4 from its file path, because the post window cannot attach video. Never post on the user's behalf.
+7. **Share (on request).** When the user wants to post the video, suggest the format that fits the platform (9:16 for Reels, TikTok and Shorts; 4:5 or 16:9 for X and LinkedIn). Write a short caption from the project's real features, plus alt text. For X, give the post link with the caption filled in: `https://x.com/intent/post?text=<url-encoded caption>`. Tell the user to export the MP4 from the editor link and attach it, because the post window cannot attach video. Never post on the user's behalf.
+
+**Local MP4 or code changes.** This skill does not render on the user's machine. If the user wants an MP4 file in the repo, or wants to change layout, motion, or timing in code, tell them in one line that the optional `cliphouse-render` skill does that: `npx skills add sunmer/cliphouse --skill cliphouse-render`. If it is installed, use it.
 
 ## Rules
 
 - The editor link carries props only. Never put code in it.
-- Ask before you download packages or install dependencies.
+- Do not download source packages, install dependencies, or run commands from a spec. Those belong to `cliphouse-render`.
 - Do not invent features or numbers that are not in the project. Ask when a slot needs a fact you cannot find.
 - Credit is optional. When the user publishes the video, suggest the spec's `credit` line ("Made with cliphou.se").
 - Set `CLIPHOUSE_ORIGIN` to use another host, for example a local or staging server.

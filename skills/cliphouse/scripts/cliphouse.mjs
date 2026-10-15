@@ -225,7 +225,7 @@ async function spec([id]) {
   const s = r ? JSON.parse(r.text) : await get(`/templates/${id}/agent.json`);
   // Print the parts an agent edits. Source package and render steps are left out on purpose:
   // local rendering lives in the separate cliphouse-render skill. The full spec stays at fullSpec.
-  const instructions = (s.instructions ?? []).filter((line) => !/source\.(package|renderCommand)|render the source|download/i.test(line));
+  const instructions = (s.instructions ?? []).filter((line) => !/source\.(package|render)|render the source|download/i.test(line));
   console.log(JSON.stringify({
     id: s.id, title: s.title, engine: s.engine, format: s.format, templateVersion: s.templateVersion,
     editableFields: s.editableFields, props: s.props, music: s.music ?? null,
@@ -265,8 +265,9 @@ async function preview(args) {
   if (result.isError) die(`props rejected: ${result.text}`);
   const data = JSON.parse(result.text);
   let local = null;
-  if (data.poster) {
-    const name = data.poster.split('/').pop();
+  // Cache the poster only when it is served from <origin>/previews/ with a plain file name.
+  const name = typeof data.poster === 'string' && data.poster.startsWith(`${ORIGIN}/previews/`) ? data.poster.split('/').pop() : '';
+  if (/^[A-Za-z0-9._-]{1,120}\.(jpg|jpeg|png|webp)$/.test(name)) {
     local = join(CACHE, `custom-${name}`);
     mkdirSync(CACHE, {recursive: true});
     if (result.image?.data) writeFileSync(local, Buffer.from(result.image.data, 'base64'));

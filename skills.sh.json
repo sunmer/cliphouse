@@ -1,0 +1,11 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Video",
+      "description": "Launch videos for what you ship. Pick a motion graphics template in your agent, fill it from your repo, and get an editable video.",
+      "skills": ["cliphouse", "cliphouse-render"]
+    }
+  ]
+}
