@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // cliphou.se helper for coding agents. Node 18+, no dependencies.
-// Commands: search, spec, link, pick. Set CLIPHOUSE_ORIGIN to test against another host.
+// Commands: search, spec, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
 import {writeFileSync, mkdtempSync, readFileSync, mkdirSync, existsSync} from 'node:fs';
 import {tmpdir, homedir} from 'node:os';
 import {join} from 'node:path';
-import {spawn} from 'node:child_process';
 
 const ORIGIN = (process.env.CLIPHOUSE_ORIGIN || 'https://cliphou.se').replace(/\/$/, '');
 const ASPECTS = ['16:9', '9:16', '4:5', '1:1'];
@@ -32,8 +31,20 @@ async function get(path, type = 'json') {
 }
 
 // Cache preview files locally. Chat apps render local media reliably; remote URLs may be blocked.
-const CACHE = join(process.env.CLIPHOUSE_CACHE || join(homedir(), '.cache', 'cliphouse'), 'previews');
+const ROOT = process.env.CLIPHOUSE_CACHE || join(homedir(), '.cache', 'cliphouse');
+const CACHE = join(ROOT, 'previews');
+// The last searchId, so spec, preview, and link calls can be tied to the search that found the template.
+const LAST = join(ROOT, 'last-search.json');
+const remember = (searchId) => { try { mkdirSync(ROOT, {recursive: true}); writeFileSync(LAST, JSON.stringify({searchId, at: Date.now()})); } catch {} };
+const lastSearch = () => {
+  try {
+    const {searchId, at} = JSON.parse(readFileSync(LAST, 'utf8'));
+    return Date.now() - at < 6 * 3600_000 && /^[A-Za-z0-9_-]{8,40}$/.test(searchId) ? searchId : undefined;
+  } catch { return undefined; }
+};
+// Only preview files from <origin>/previews/ are cached, and only for checked template ids.
 async function cached(id, ext) {
+  if (!ID.test(id) || !['mp4', 'jpg'].includes(ext)) throw new Error(`invalid preview ${id}.${ext}`);
   const file = join(CACHE, `${id}.${ext}`);
   if (existsSync(file)) return file;
   mkdirSync(CACHE, {recursive: true});
@@ -106,7 +117,9 @@ ${tiles.join('\n')}
     mark(id);
     status.textContent = 'Selected ' + title;
     window.openai?.setWidgetState?.({modelContent: {selected: id}, privateContent: {selected: id}})?.catch?.(() => {});
-    try { await window.openai?.sendFollowUpMessage?.({prompt: '$cliphouse: use template ' + id + ' (' + title + ') and fill it for this project', title: 'Use ' + title}); } catch {}
+    // Runs only on the user's click, and sends only this fixed message with a checked id.
+    if (!/^[a-z0-9-]+$/.test(id)) return;
+    try { await window.openai?.sendFollowUpMessage?.({prompt: '$cliphouse: use template ' + id + ' and fill it for this project'}); } catch {}
   }));
   tiles.forEach((t) => t.querySelector('video').play?.().catch(() => {}));
 })();
@@ -152,15 +165,16 @@ const summarize = (item, spec) => ({
 });
 
 // One MCP tool call over plain HTTPS (stateless Streamable HTTP, JSON responses).
-async function mcp(name, args) {
+async function mcp(name, args, timeout = 15_000) {
   const res = await fetch(`${ORIGIN}/mcp`, {
-    method: 'POST', signal: AbortSignal.timeout(15_000),
-    headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'User-Agent': 'cliphouse-skill/1.1'},
+    method: 'POST', signal: AbortSignal.timeout(timeout),
+    headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'User-Agent': 'cliphouse-skill/1.2'},
     body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name, arguments: args}}),
   });
   const body = await res.json().catch(() => null);
   if (!res.ok || body?.error) throw Object.assign(new Error(body?.error?.message ?? `HTTP ${res.status}`), {status: res.status});
-  return {text: body.result.content?.[0]?.text ?? '', isError: Boolean(body.result.isError)};
+  const content = body.result.content ?? [];
+  return {text: content[0]?.text ?? '', isError: Boolean(body.result.isError), image: content.find((c) => c.type === 'image')};
 }
 
 async function search(args) {
@@ -180,10 +194,11 @@ async function search(args) {
       maxSeconds: opts.maxSeconds || undefined, limit: opts.limit});
     if (!isError) {
       const found = JSON.parse(text);
+      if (found.searchId) remember(found.searchId);
       const results = (Array.isArray(found) ? found : found.results ?? []).map((r) => ({...summarize(r, null), ...r,
         poster: r.poster ?? `${ORIGIN}/previews/${r.id}.jpg`, preview: r.preview ?? `${ORIGIN}/previews/${r.id}.mp4`}));
       const markdown = opts.inline ? await inline(results) : undefined;
-      console.log(JSON.stringify({query, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'server', results, markdown}, null, 2));
+      console.log(JSON.stringify({query, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'server', searchId: found.searchId, results, markdown}, null, 2));
       return;
     }
   } catch {}
@@ -204,12 +219,17 @@ async function search(args) {
 
 async function spec([id]) {
   if (!ID.test(id ?? '')) die('usage: spec <template-id>');
-  const s = await get(`/templates/${id}/agent.json`);
-  // Print the parts an agent edits. The full spec stays at fullSpec.
+  // The MCP tool returns the same spec and records the pick. The static file is the fallback.
+  const r = await mcp('get_template_spec', {variantId: id, searchId: lastSearch()}).catch(() => null);
+  if (r?.isError) die(r.text);
+  const s = r ? JSON.parse(r.text) : await get(`/templates/${id}/agent.json`);
+  // Print the parts an agent edits. Source package and render steps are left out on purpose:
+  // local rendering lives in the separate cliphouse-render skill. The full spec stays at fullSpec.
+  const instructions = (s.instructions ?? []).filter((line) => !/source\.(package|renderCommand)|render the source|download/i.test(line));
   console.log(JSON.stringify({
     id: s.id, title: s.title, engine: s.engine, format: s.format, templateVersion: s.templateVersion,
-    editableFields: s.editableFields, props: s.props, music: s.music ?? null, source: s.source,
-    handoff: s.handoff?.urlTemplate, credit: s.credit, instructions: s.instructions, fullSpec: `${ORIGIN}/templates/${id}/agent.json`,
+    editableFields: s.editableFields, props: s.props, music: s.music ?? null,
+    handoff: s.handoff?.urlTemplate, credit: s.credit, instructions, fullSpec: `${ORIGIN}/templates/${id}/agent.json`,
   }, null, 2));
 }
 
@@ -217,18 +237,73 @@ async function spec([id]) {
 async function link([id, file]) {
   if (!ID.test(id ?? '') || !file) die('usage: link <template-id> <props.json | ->');
   const props = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
-  const {text, isError} = await mcp('build_edit_link', {variantId: id, props}).catch((e) => die(e.message));
+  const {text, isError} = await mcp('build_edit_link', {variantId: id, props, searchId: lastSearch()}).catch((e) => die(e.message));
   if (isError) die(`props rejected: ${text}`);
   console.log(JSON.parse(text).url);
 }
 
+// Render the filled template on the server and save the poster locally, so the chat can show it inline.
+async function preview(args) {
+  const outIndex = args.indexOf('--out');
+  const out = outIndex >= 0 ? args[outIndex + 1] : null;
+  const [id, file] = args.filter((a, i) => outIndex < 0 || (i !== outIndex && i !== outIndex + 1));
+  if (!ID.test(id ?? '') || !file) die('usage: preview <template-id> <props.json | -> [--out <file.html>]');
+  const props = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
+  const started = Date.now();
+  let result;
+  try { result = await mcp('render_preview', {variantId: id, props, searchId: lastSearch()}, 40_000); }
+  catch (e) {
+    if (e.status === 429 || /abort|timed out/i.test(e.message)) {
+      // The editor link still shows the filled video, so the flow continues without a poster.
+      const fallback = await mcp('build_edit_link', {variantId: id, props, searchId: lastSearch()}).catch(() => null);
+      if (!fallback || fallback.isError) die(e.message);
+      console.log(JSON.stringify({poster: null, local: null, editor: JSON.parse(fallback.text).url, message: 'The preview is not available. Open the editor link to see the video.'}, null, 2));
+      return;
+    }
+    die(e.message);
+  }
+  if (result.isError) die(`props rejected: ${result.text}`);
+  const data = JSON.parse(result.text);
+  let local = null;
+  if (data.poster) {
+    const name = data.poster.split('/').pop();
+    local = join(CACHE, `custom-${name}`);
+    mkdirSync(CACHE, {recursive: true});
+    if (result.image?.data) writeFileSync(local, Buffer.from(result.image.data, 'base64'));
+    else {
+      const res = await fetch(data.poster, {signal: AbortSignal.timeout(20_000)}).catch(() => null);
+      if (res?.ok) writeFileSync(local, Buffer.from(await res.arrayBuffer())); else local = null;
+    }
+  }
+  const title = (await get(`/templates/${id}/agent.json`).catch(() => null))?.title ?? id;
+  const markdown = local ? `![${title.replace(/[\]|]/g, '')}](${local})` : undefined;
+  let reference;
+  if (out && local) {
+    const src = `data:image/jpeg;base64,${readFileSync(local).toString('base64')}`;
+    writeFileSync(out, `<div id="cliphouse-preview">
+<style>
+#cliphouse-preview{display:flex;flex-direction:column;gap:12px;max-width:640px}
+#cliphouse-preview img{width:100%;height:auto;border-radius:8px;box-shadow:0 0 0 3px #3ec9b0;background:#000}
+#cliphouse-preview .ch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#cliphouse-preview .ch-title{font-weight:600;font-size:14px}
+#cliphouse-preview a{font:600 14px/1 system-ui,sans-serif;color:#0d1a17;background:#3ec9b0;border-radius:6px;padding:9px 12px;text-decoration:none}
+</style>
+<img src="${src}" alt="${esc(title)} with your product">
+<div class="ch-row"><span class="ch-title">${esc(title)}</span><a href="${esc(data.editor)}" target="_blank" rel="noopener">Open in editor</a></div>
+</div>
+`);
+    reference = `visualize{"path":"${out}"}`;
+  }
+  console.log(JSON.stringify({poster: data.poster, local, editor: data.editor, video: data.video ?? null, markdown, reference,
+    message: data.message, seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 
-// Write a local page that plays the previews side by side, then open it.
+// Write a local page that plays the previews side by side. It prints the path; the agent asks before opening it.
 async function pick(args) {
-  const noOpen = args.includes('--no-open');
   const ids = args.filter((a) => a !== '--no-open');
-  if (!ids.length || ids.some((id) => !ID.test(id))) die('usage: pick <id> [id...] [--no-open]');
+  if (!ids.length || ids.some((id) => !ID.test(id))) die('usage: pick <id> [id...]');
   const specs = await Promise.all(ids.map((id) => get(`/templates/${id}/agent.json`).catch(() => null)));
   const cards = ids.map((id, i) => {
     const s = specs[i];
@@ -248,14 +323,10 @@ button,a{font:inherit;color:#eceae4;background:#262a31;border:1px solid #333944;
 <script>document.addEventListener('click',async(e)=>{const b=e.target.closest('[data-copy]');if(!b)return;await navigator.clipboard.writeText(b.dataset.copy);const t=b.textContent;b.textContent='Copied';setTimeout(()=>b.textContent=t,1200)})</script></body></html>`;
   const file = join(mkdtempSync(join(tmpdir(), 'cliphouse-')), 'picks.html');
   writeFileSync(file, html);
-  if (!noOpen) {
-    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
-    spawn(cmd, [file], {detached: true, stdio: 'ignore'}).on('error', () => {}).unref();
-  }
   console.log(file);
 }
 
 const [command, ...rest] = process.argv.slice(2);
-const commands = {search, spec, link, pick, picker};
-if (!commands[command]) die('usage: cliphouse.mjs <search|spec|link|pick|picker> ...');
+const commands = {search, spec, preview, link, pick, picker};
+if (!commands[command]) die('usage: cliphouse.mjs <search|spec|preview|link|pick|picker> ...');
 commands[command](rest).catch((e) => die(/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|abort/i.test(`${e.message} ${e.cause?.code ?? ''}`) ? `cannot reach ${ORIGIN}. Check the network and try again.` : e.message));

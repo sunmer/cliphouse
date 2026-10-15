@@ -23,10 +23,11 @@ Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the
    - **Terminal only.** Open the browser page: `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`.
    Under the grid, add at most one short line on why these fit. Ask the user to click a template or reply with a number. A message like `$cliphouse: use template <id> and fill it for this project` selects that template. Continue at step 4 with that id.
 4. **Fill the template.** Run `node <skill-dir>/scripts/cliphouse.mjs spec <id>`. Start from `props`, and change only `props.texts`, `props.theme`, and `props.media` (and `hidden`/`audio` for music templates). Keep every text within its `maxLength` and every color as `#RRGGBB`. Use the project's real facts and brand colors. Keep enough contrast between `foreground` and `background`. Write the props to `cliphouse/<id>.props.json` in the project.
-5. **Show the result.** Validate and get an editor link:
-   `node <skill-dir>/scripts/cliphouse.mjs link <id> cliphouse/<id>.props.json`
-   The command fails with a reason when the props are invalid. Fix the props and run it again. Give the user the link and a short table of the text you used.
-6. **Iterate.** Treat each follow-up ("punchier", "use our green", "shorter headline") as an edit to the props file. Run `link` again and give the new link. To change the format or style, go back to step 2.
+5. **Show their product in the template.** Render a personalized poster on the server. It takes a few seconds and needs no local install:
+   - Interactive picker: `node <skill-dir>/scripts/cliphouse.mjs preview <id> cliphouse/<id>.props.json --out <visualization-dir>/cliphouse-preview.html`. Put the printed `reference` line on its own line in your final response, exactly as printed.
+   - Other apps: `node <skill-dir>/scripts/cliphouse.mjs preview <id> cliphouse/<id>.props.json`. Copy its `markdown` field into your reply exactly as given.
+   Then give the `editor` link (it plays the filled video live, and the user exports the MP4 there) and a short table of the text you used. The command fails with a reason when the props are invalid. Fix the props and run it again. When `poster` is null, give the editor link and its `message`. Do not retry.
+6. **Iterate.** Treat each follow-up ("punchier", "use our green", "shorter headline") as an edit to the props file. Run `preview` again and show the new poster and link. Use `link <id> <props.json>` only when the user wants just the link. To change the format or style, go back to step 2.
 7. **Render or edit code (on request).** When the user wants an MP4 in the repo, or wants changes to layout, motion, or timing:
    - Download `source.package` from the spec into `cliphouse/<id>/` and extract it (`curl -L <package> | tar xz`).
    - Copy the props into the package: `props.json` for Remotion. For HyperFrames, set `text_<role>`, `theme_<role>`, and `hide_<role>` in `variables.json`.
