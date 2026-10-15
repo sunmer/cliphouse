@@ -32,6 +32,7 @@ Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the
    - Copy the props into the package: `props.json` for Remotion. For HyperFrames, set `text_<role>`, `theme_<role>`, and `hide_<role>` in `variables.json`.
    - Run `source.renderCommand` in the package directory. The output is `out/video.mp4`. Packages need Node 22.6+. Remotion runs `npm ci`, and the first render downloads a headless browser.
    - For code changes, edit the package code, render again, and show the file path.
+8. **Share (on request).** When the user wants to post the video, render the MP4 (step 7) in the format that fits the platform (9:16 for Reels, TikTok and Shorts; 4:5 or 16:9 for X and LinkedIn). Write a short caption from the project's real features, plus alt text. For X, open the post window with the caption filled in: `https://x.com/intent/post?text=<url-encoded caption>`. Tell the user to attach the MP4 from its file path, because the post window cannot attach video. Never post on the user's behalf.
 
 ## Rules
 

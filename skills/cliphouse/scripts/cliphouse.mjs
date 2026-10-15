@@ -151,6 +151,18 @@ const summarize = (item, spec) => ({
   page: `${ORIGIN}/templates/${item.id}/`, editor: `${ORIGIN}/#/v/${item.id}`,
 });
 
+// One MCP tool call over plain HTTPS (stateless Streamable HTTP, JSON responses).
+async function mcp(name, args) {
+  const res = await fetch(`${ORIGIN}/mcp`, {
+    method: 'POST', signal: AbortSignal.timeout(15_000),
+    headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'User-Agent': 'cliphouse-skill/1.1'},
+    body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name, arguments: args}}),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body?.error) throw Object.assign(new Error(body?.error?.message ?? `HTTP ${res.status}`), {status: res.status});
+  return {text: body.result.content?.[0]?.text ?? '', isError: Boolean(body.result.isError)};
+}
+
 async function search(args) {
   const opts = {limit: 6, aspect: null, maxSeconds: null, query: []};
   for (let i = 0; i < args.length; i++) {
@@ -162,6 +174,19 @@ async function search(args) {
   }
   if (opts.aspect && !ASPECTS.includes(opts.aspect)) die(`--aspect must be one of ${ASPECTS.join(', ')}`);
   const query = opts.query.join(' ');
+  // Server search first, so the skill and the MCP server rank the same way.
+  try {
+    const {text, isError} = await mcp('search_templates', {query: query || undefined, aspect: opts.aspect ?? undefined,
+      maxSeconds: opts.maxSeconds || undefined, limit: opts.limit});
+    if (!isError) {
+      const found = JSON.parse(text);
+      const results = (Array.isArray(found) ? found : found.results ?? []).map((r) => ({...summarize(r, null), ...r,
+        poster: r.poster ?? `${ORIGIN}/previews/${r.id}.jpg`, preview: r.preview ?? `${ORIGIN}/previews/${r.id}.mp4`}));
+      const markdown = opts.inline ? await inline(results) : undefined;
+      console.log(JSON.stringify({query, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'server', results, markdown}, null, 2));
+      return;
+    }
+  } catch {}
   const terms = words(query).filter((w) => !ASPECTS.includes(w)).map((w) => (SYNONYMS[w] ?? SYNONYMS[stem(w)] ?? [w]).map(stem));
   const items = await catalog();
   const ranked = items.map((item) => ({item, s: terms.length ? score(item, terms) : 1})).filter((r) => r.s > 0)
@@ -174,7 +199,7 @@ async function search(args) {
     .filter((r) => !opts.maxSeconds || !r.seconds || r.seconds <= opts.maxSeconds)
     .slice(0, opts.limit);
   const markdown = opts.inline ? await inline(results) : undefined;
-  console.log(JSON.stringify({query, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, catalogSize: items.length, results, markdown}, null, 2));
+  console.log(JSON.stringify({query, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'local', catalogSize: items.length, results, markdown}, null, 2));
 }
 
 async function spec([id]) {
@@ -192,16 +217,9 @@ async function spec([id]) {
 async function link([id, file]) {
   if (!ID.test(id ?? '') || !file) die('usage: link <template-id> <props.json | ->');
   const props = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
-  const res = await fetch(`${ORIGIN}/mcp`, {
-    method: 'POST', signal: AbortSignal.timeout(15_000),
-    headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream'},
-    body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name: 'build_edit_link', arguments: {variantId: id, props}}}),
-  });
-  const body = await res.json().catch(() => null);
-  const content = body?.result?.content?.[0]?.text;
-  if (!res.ok || body?.error) die(body?.error?.message ?? `HTTP ${res.status}`);
-  if (body.result.isError) die(`props rejected: ${content}`);
-  console.log(JSON.parse(content).url);
+  const {text, isError} = await mcp('build_edit_link', {variantId: id, props}).catch((e) => die(e.message));
+  if (isError) die(`props rejected: ${text}`);
+  console.log(JSON.parse(text).url);
 }
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -240,4 +258,4 @@ button,a{font:inherit;color:#eceae4;background:#262a31;border:1px solid #333944;
 const [command, ...rest] = process.argv.slice(2);
 const commands = {search, spec, link, pick, picker};
 if (!commands[command]) die('usage: cliphouse.mjs <search|spec|link|pick|picker> ...');
-commands[command](rest).catch((e) => die(e.message));
+commands[command](rest).catch((e) => die(/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|abort/i.test(`${e.message} ${e.cause?.code ?? ''}`) ? `cannot reach ${ORIGIN}. Check the network and try again.` : e.message));
