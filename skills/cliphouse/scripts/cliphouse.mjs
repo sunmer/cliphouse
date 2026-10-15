@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // cliphou.se helper for coding agents. Node 18+, no dependencies.
-// Commands: search, spec, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
+// Commands: search, spec, tailor, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
 import {writeFileSync, mkdtempSync, readFileSync, mkdirSync, existsSync} from 'node:fs';
 import {tmpdir, homedir} from 'node:os';
 import {join} from 'node:path';
@@ -178,7 +178,8 @@ async function mcp(name, args, timeout = 15_000) {
   const body = await res.json().catch(() => null);
   if (!res.ok || body?.error) throw Object.assign(new Error(body?.error?.message ?? `HTTP ${res.status}`), {status: res.status});
   const content = body.result.content ?? [];
-  return {text: content[0]?.text ?? '', isError: Boolean(body.result.isError), image: content.find((c) => c.type === 'image')};
+  const images = content.filter((c) => c.type === 'image');
+  return {text: content[0]?.text ?? '', isError: Boolean(body.result.isError), image: images[0], images};
 }
 
 async function search(args) {
@@ -311,6 +312,64 @@ async function preview(args) {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 
+// Save a personalized poster from the server under the cache, keyed by its <sha256>.jpg name.
+function savePoster(poster, image) {
+  const name = typeof poster === 'string' && poster.startsWith(`${ORIGIN}/p/`) ? poster.split('/').pop() : '';
+  if (!/^[a-f0-9]{64}\.jpg$/.test(name) || !image?.data) return null;
+  const local = join(CACHE, `custom-${name}`);
+  mkdirSync(CACHE, {recursive: true});
+  writeFileSync(local, Buffer.from(image.data, 'base64'));
+  return local;
+}
+
+// Render the shortlisted templates with the project's brand, so the grid already shows the user's product.
+// Writes cliphouse/<id>.props.json for each template, so the fill step starts from the tailored props.
+async function tailor(args) {
+  const brandIndex = args.indexOf('--brand');
+  const file = brandIndex >= 0 ? args[brandIndex + 1] : null;
+  const ids = args.filter((a, i) => brandIndex < 0 || (i !== brandIndex && i !== brandIndex + 1));
+  if (!file || !ids.length || ids.length > 4 || ids.some((id) => !ID.test(id))) die('usage: tailor <id1> [id2 id3 id4] --brand <brand.json | ->');
+  const brand = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
+  const started = Date.now();
+  let result;
+  try { result = await mcp('render_previews', {variantIds: ids, brand, searchId: lastSearch()}, 40_000); }
+  catch (e) { result = {isError: true, text: e.message, unavailable: true}; }
+  // Older servers or a failure: fall back to the stock grid, so the user still sees the options.
+  if (result.isError && (result.unavailable || /not found|unknown tool/i.test(result.text))) {
+    const items = ids.map((id) => ({id, title: id, localPreview: null, preview: `${ORIGIN}/previews/${id}.mp4`}));
+    for (const r of items) r.localPreview = await cached(r.id, 'mp4').catch(() => null);
+    console.log(JSON.stringify({tailored: false, message: 'Tailored previews are not available. Showing stock previews.', markdown: grid(items)}, null, 2));
+    return;
+  }
+  if (result.isError) die(`brand rejected: ${result.text}`);
+  const {results} = JSON.parse(result.text);
+  const images = [...(result.images ?? [])];
+  mkdirSync('cliphouse', {recursive: true});
+  const items = [];
+  for (const r of results) {
+    const local = r.poster ? savePoster(r.poster, images.shift()) : null;
+    const fallback = local ? null : await cached(r.id, 'mp4').catch(() => null);
+    const propsFile = join('cliphouse', `${r.id}.props.json`);
+    writeFileSync(propsFile, `${JSON.stringify(r.props, null, 2)}\n`);
+    items.push({id: r.id, title: r.title, aspect: r.aspect, tailored: Boolean(local), localPreview: local ?? fallback, preview: r.stockPoster,
+      editor: r.editor, propsFile, keptSample: r.keptSample ?? []});
+  }
+  console.log(JSON.stringify({tailored: items.some((i) => i.tailored), results: items, markdown: grid(items),
+    seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
+}
+
+// Two-column Markdown table: a title row, then a media row, for each pair.
+function grid(items) {
+  const cell = (r, i) => (r ? `**${i + 1}. ${String(r.title).replace(/\|/g, '-')}**` : ' ');
+  const media = (r) => (r ? (r.localPreview ? `![${String(r.title).replace(/[\]|]/g, '')}](${r.localPreview})` : `[Preview](${r.preview})`) : ' ');
+  const rows = [];
+  for (let i = 0; i < items.length; i += 2) {
+    const [a, b] = [items[i], items[i + 1]];
+    rows.push(`| ${cell(a, i)} | ${cell(b, i + 1)} |`, ...(i === 0 ? ['| --- | --- |'] : []), `| ${media(a)} | ${media(b)} |`);
+  }
+  return rows.join('\n');
+}
+
 // Write a local page that plays the previews side by side. It prints the path; the agent asks before opening it.
 async function pick(args) {
   const ids = args.filter((a) => a !== '--no-open');
@@ -338,6 +397,6 @@ button,a{font:inherit;color:#eceae4;background:#262a31;border:1px solid #333944;
 }
 
 const [command, ...rest] = process.argv.slice(2);
-const commands = {search, spec, preview, link, pick, picker};
-if (!commands[command]) die('usage: cliphouse.mjs <search|spec|preview|link|pick|picker> ...');
+const commands = {search, spec, tailor, preview, link, pick, picker};
+if (!commands[command]) die('usage: cliphouse.mjs <search|spec|tailor|preview|link|pick|picker> ...');
 commands[command](rest).catch((e) => die(/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|abort/i.test(`${e.message} ${e.cause?.code ?? ''}`) ? `cannot reach ${ORIGIN}. Check the network and try again.` : e.message));

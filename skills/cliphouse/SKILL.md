@@ -17,16 +17,21 @@ What the helper does:
 
 ## Workflow
 
-1. **Learn the project first.** Before you search, read the README, `package.json`, or the landing page. Collect the product name, a short tagline, 3 key features or numbers, the call to action, and brand colors (CSS variables, Tailwind config, logo SVG). Do not ask the user for facts that the repo already contains.
+1. **Learn the project first.** Before you search, read the README, `package.json`, or the landing page. Collect the product name, a short tagline, 3 key features or numbers, the call to action, and brand colors (CSS variables, Tailwind config, logo SVG). Do not ask the user for facts that the repo already contains. Write them to `cliphouse/brand.json` in the project:
+   `{"name": "...", "headline": "...", "subhead": "...", "points": ["...", "...", "..."], "cta": "...", "theme": {"background": "#RRGGBB", "surface": "#RRGGBB", "foreground": "#RRGGBB", "accent": "#RRGGBB", "accent2": "#RRGGBB"}}`
+   Only `name` is required. Keep points to short phrases. Add `"date"` only when the project states one. Never invent numbers. Keep good contrast between `foreground` and `background`.
 2. **Search.** Write a short query from the request and the project, for example `product launch developer tool`. Add `--aspect 16:9|9:16|4:5|1:1` or `--max-seconds N` only when the user or the destination implies one (vertical for Reels and TikTok, 16:9 for YouTube and websites).
-   `node <skill-dir>/scripts/cliphouse.mjs search "<query>" --inline [--aspect 9:16] [--max-seconds 20] [--limit 6]`
+   `node <skill-dir>/scripts/cliphouse.mjs search "<query>" [--aspect 9:16] [--max-seconds 20] [--limit 6]`
    When there are no results, retry once with broader words. Then tell the user what is missing.
-3. **Show the options inline.** Pick the best 4 results (at most 6). Use the first option that the interface supports:
-   - **Markdown grid (Codex desktop and other apps that render media).** Copy the `markdown` field from the `--inline` search output into your reply exactly as given. It is a 2-column table of titles and playing videos. Do not wrap it in a code block, and do not change the paths. Do not use a `visualize` reference for the options.
+3. **Show the options with the user's product in them.** Pick the best 4 results. Prefer templates that do not need numbers the project lacks. Render all 4 with the brand in one call:
+   `node <skill-dir>/scripts/cliphouse.mjs tailor <id1> <id2> <id3> <id4> --brand cliphouse/brand.json`
+   It takes a few seconds, writes `cliphouse/<id>.props.json` for each template, and prints a `markdown` grid.
+   - **Markdown grid (Codex desktop and other apps that render media).** Copy the `markdown` field into your reply exactly as given. It is a 2-column table of titles and posters that show the user's product. Do not wrap it in a code block, and do not change the paths. Do not use a `visualize` reference.
+   - When `tailored` is false, the grid shows stock previews instead. Say so in one short line.
    - **Terminal only (no inline media).** List the options as a numbered list with title, aspect, length, and the `page` link. Then ask if the user wants a side-by-side preview page in the browser. Only when they say yes, run `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`. It prints a file path and does not open it. Open it only with the user's permission, or give them the path.
 
    Under the grid, add at most one short line on why these fit. Ask the user to reply with a number.
-4. **Fill the template.** Run `node <skill-dir>/scripts/cliphouse.mjs spec <id>`. Start from `props`, and change only `props.texts`, `props.theme`, and `props.media` (and `hidden`/`audio` for music templates). Keep every text within its `maxLength` and every color as `#RRGGBB`. Use the project's real facts and brand colors. Keep enough contrast between `foreground` and `background`. Write the props to `cliphouse/<id>.props.json` in the project.
+4. **Fill the template.** Run `node <skill-dir>/scripts/cliphouse.mjs spec <id>`. Start from `cliphouse/<id>.props.json`, which `tailor` already filled. Its `keptSample` list names the text fields that still hold the template's sample text: replace those with real facts from the project, or tell the user which ones you could not fill. Change only `props.texts`, `props.theme`, and `props.media` (and `hidden`/`audio` for music templates). Keep every text within its `maxLength` and every color as `#RRGGBB`. Write the props back to `cliphouse/<id>.props.json`.
 5. **Show their product in the template.** Render a personalized poster on the server. It takes a few seconds and needs no local install:
    - `node <skill-dir>/scripts/cliphouse.mjs preview <id> cliphouse/<id>.props.json`. Copy its `markdown` field into your reply exactly as given.
    Then give the `editor` link (it plays the filled video live, and the user exports the MP4 there for free) and a short table of the text you used. The command fails with a reason when the props are invalid. Fix the props and run it again. When `poster` is null, give the editor link and its `message`. Do not retry.
