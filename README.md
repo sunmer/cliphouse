@@ -2,7 +2,7 @@
 
 **You ship it. Cliphouse shows it off.**
 
-Your coding agent turns every release into a video for your socials. It finds the selling points, writes the copy, and uses your brand colors. Free skill and MCP server for Claude Code, Codex, Cursor, Claude, and ChatGPT.
+Your coding agent turns every release into a video for your socials. It finds the selling points, picks the angle, writes the copy, and uses your brand colors. Free skill and MCP server for Claude Code, Codex, Cursor, Claude, and ChatGPT.
 
 You can preview and edit without an account. MP4 download and editing more than 3 gallery templates need a free Google sign-in.
 
