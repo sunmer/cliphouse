@@ -1,10 +1,12 @@
 # cliphou.se
 
-**You build the product. cliphou.se helps market it in video.**
+**You ship it. Cliphouse shows it off.**
 
-Pick a marketing goal in your coding agent or chat app, fill a proven motion graphics template from your repo, and get an editable video. Free, MIT-0, no account.
+Your coding agent turns every release into a video for your socials. It finds the selling points and uses your brand. Free skill and MCP server for Claude Code, Codex, Cursor, Claude, and ChatGPT.
 
-[![Demo: a coding agent suggests launch video templates, the user picks one, and the agent fills it from the repo](demo.gif)](https://github.com/sunmer/cliphouse/releases/download/demo-v1/cliphouse-agent-demo.mp4)
+You can preview and edit without an account. MP4 download and editing more than 3 gallery templates need a free Google sign-in.
+
+[![Demo: a coding agent suggests release video templates, the user picks one, and the agent fills it from the repo](demo.gif)](https://github.com/sunmer/cliphouse/releases/download/demo-v1/cliphouse-agent-demo.mp4)
 
 [Watch the full demo (31 seconds)](https://github.com/sunmer/cliphouse/releases/download/demo-v1/cliphouse-agent-demo.mp4), or see it play at [cliphou.se/agents](https://cliphou.se/agents/). Some steps in it are coming soon. See [Status](#status).
 
@@ -62,11 +64,11 @@ GitHub does not open `cursor://` and `vscode:` links from a README in every brow
 
 Open your project and ask:
 
-> Deploy to prod. Btw we need a launch video.
+> Let's ship 2.1. Btw we need a release video for our socials.
 
-> Make a 10-second vertical changelog video for v2.3.
+> Make a vertical changelog video for this week's updates.
 
-> Turn this release into a 16:9 video for our landing page.
+> Turn this API release into a 16:9 video for X and LinkedIn.
 
 In Codex, type `$cliphouse` to call the skill directly.
 
@@ -74,10 +76,9 @@ In Codex, type `$cliphouse` to call the skill directly.
 
 | In the demo | Status |
 | --- | --- |
-| Template grid in the chat that already shows your product, reply with a number to pick | Available |
+| Template grid in the chat that already shows your product, with short animated previews | Available |
 | Filling the template from your repo, and editing it by prompt | Available. You get a cliphou.se editor link, where you export the MP4. |
 | A preview of your own product in the picked template | Available as a poster image. An animated preview is coming. |
-| Previews that turn into your product inside the grid | Coming soon. Today the grid shows each template's demo copy. |
 | Posting to X from the agent | Coming soon. Today the agent writes the caption and opens the X post window for you to attach the MP4. |
 
 ## Skills in this repo
