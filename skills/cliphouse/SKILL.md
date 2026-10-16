@@ -9,7 +9,7 @@ cliphou.se turns what the user builds into marketing videos. It uses editable mo
 
 Most users are developers and small teams with no marketer. Act as their marketer: find the selling points, pick the angle, and write copy that sells. Do not just copy the README.
 
-Contract version: `2026-10-16.2`.
+Contract version: `2026-10-17.1`.
 
 Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the directory that contains this file.
 
@@ -17,12 +17,14 @@ What the helper does:
 
 - It reads public data from `https://cliphou.se` over HTTPS: the MCP server at `/mcp`, the template specs, and the previews.
 - It caches stock previews only from `https://cliphou.se/previews/` and personalized posters only from `https://cliphou.se/p/<hash>.jpg`, in `~/.cache/cliphouse`.
-- It writes only the file you name with `--out`, and a temporary picks page. It never runs other programs, installs packages, or opens apps.
+- `logo` uploads one logo file from the project to cliphou.se and adds it to `cliphouse/brand.json`.
+- It writes only the file you name with `--out`, the brand file, and a temporary picks page. It never runs other programs, installs packages, or opens apps.
 
 ## Workflow
 
 1. **Learn the project first.** Before you search, read the README, `package.json`, or the landing page. Collect the product name, a short tagline, 3 key features or numbers, the call to action, and brand colors (CSS variables, Tailwind config, logo SVG). Do not ask the user for facts that the repo already contains. Write them to `cliphouse/brand.json` in the project:
    `{"name": "...", "headline": "...", "subhead": "...", "points": ["...", "...", "..."], "cta": "...", "theme": {"background": "#RRGGBB", "surface": "#RRGGBB", "foreground": "#RRGGBB", "accent": "#RRGGBB", "accent2": "#RRGGBB"}}`
+   **Logo.** Run `node <skill-dir>/scripts/cliphouse.mjs logo` once. It finds the project's logo (`logo.svg`, `public/logo.svg`, `assets/logo.png`, and similar), uploads it, and adds `"logo"` to `cliphouse/brand.json`. Pass a path when the logo is elsewhere: `logo path/to/logo.svg`. Prefer an SVG, or a PNG with a transparent background. Release and developer templates then show the logo where they show the brand name. If it finds no logo, do not ask for one: the brand name shows as text.
    Only `name` is required. Keep points to short phrases. Add `"date"` only when the project states one. Never invent numbers. Keep good contrast between `foreground` and `background`.
    **Position it before you write the copy.** From those facts, and from what changed in this release (`git log`, `CHANGELOG.md`, or the user's words), decide:
    - **Audience:** who it is for, for example "solo devs who deploy on Fridays".
