@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // cliphou.se helper for coding agents. Node 18+, no dependencies.
-// Commands: search, spec, tailor, animate, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
-import {writeFileSync, mkdtempSync, readFileSync, mkdirSync, existsSync} from 'node:fs';
+// Commands: search, spec, logo, tailor, animate, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
+import {writeFileSync, mkdtempSync, readFileSync, mkdirSync, existsSync, statSync} from 'node:fs';
 import {tmpdir, homedir} from 'node:os';
-import {join} from 'node:path';
+import {extname, join} from 'node:path';
 
 const ORIGIN = (process.env.CLIPHOUSE_ORIGIN || 'https://cliphou.se').replace(/\/$/, '');
-const CONTRACT_VERSION = '2026-10-16.2';
+const CONTRACT_VERSION = '2026-10-17.1';
 const GOALS = ['launch-product', 'announce-feature', 'share-update', 'grow-waitlist', 'announce-integration', 'announce-pricing',
   'celebrate-milestone', 'share-social-proof', 'promote-event', 'introduce-brand', 'run-promotion', 'hire-team'];
 const ASPECTS = ['16:9', '9:16', '4:5', '1:1'];
@@ -349,6 +349,34 @@ async function saveLoop(video) {
   return local;
 }
 
+// Common logo locations in a project, in order. The first one that exists is used.
+const LOGO_CANDIDATES = ['logo.svg', 'public/logo.svg', 'assets/logo.svg', 'static/logo.svg', 'src/assets/logo.svg', 'app/icon.svg', 'public/icon.svg',
+  'public/favicon.svg', 'logo.png', 'public/logo.png', 'assets/logo.png', 'static/logo.png', 'src/assets/logo.png', 'docs/logo.svg', 'docs/logo.png', '.github/logo.svg', '.github/logo.png'];
+const LOGO_TYPES = {'.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'};
+
+// Upload the project's logo and save it in the brand file, so tailor shows it in templates with a logo slot.
+// It reads only the file named, or one of LOGO_CANDIDATES in this directory, and sends it to cliphou.se.
+async function logo(args) {
+  const brandIndex = args.indexOf('--brand');
+  const brandFile = brandIndex >= 0 ? args[brandIndex + 1] : join('cliphouse', 'brand.json');
+  const named = args.filter((a, i) => brandIndex < 0 || (i !== brandIndex && i !== brandIndex + 1))[0];
+  const file = named ?? LOGO_CANDIDATES.find((p) => existsSync(p));
+  if (!file) { console.log(JSON.stringify({logo: null, message: 'No logo file found. The brand name shows as text.', looked: LOGO_CANDIDATES}, null, 2)); return; }
+  const type = LOGO_TYPES[extname(file).toLowerCase()];
+  if (!type) die('use an SVG, PNG, JPEG, or WebP logo');
+  if (statSync(file).size > 1_000_000) die('the logo must be 1 MB or smaller');
+  const bytes = readFileSync(file);
+  const result = await mcp('upload_logo', type === 'image/svg+xml' ? {svg: bytes.toString('utf8')} : {data: bytes.toString('base64')}, 30_000);
+  if (result.isError) die(`logo rejected: ${result.text}`);
+  const data = JSON.parse(result.text);
+  let brand = {};
+  try { brand = JSON.parse(readFileSync(brandFile, 'utf8')); } catch { /* A new brand file. */ }
+  brand.logo = data.logo;
+  mkdirSync(join(brandFile, '..'), {recursive: true});
+  writeFileSync(brandFile, `${JSON.stringify(brand, null, 2)}\n`);
+  console.log(JSON.stringify({file, brandFile, ...data}, null, 2));
+}
+
 // Render the shortlisted templates with the project's brand, so the grid already shows the user's product.
 // Writes cliphouse/<id>.props.json for each template, so the fill step starts from the tailored props.
 async function tailor(args) {
@@ -454,6 +482,6 @@ button,a{font:inherit;color:#eceae4;background:#262a31;border:1px solid #333944;
 }
 
 const [command, ...rest] = process.argv.slice(2);
-const commands = {search, spec, tailor, animate, preview, link, pick, picker};
-if (!commands[command]) die('usage: cliphouse.mjs <search|spec|tailor|animate|preview|link|pick|picker> ...');
+const commands = {search, spec, logo, tailor, animate, preview, link, pick, picker};
+if (!commands[command]) die('usage: cliphouse.mjs <search|spec|logo|tailor|animate|preview|link|pick|picker> ...');
 commands[command](rest).catch((e) => die(/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|abort/i.test(`${e.message} ${e.cause?.code ?? ''}`) ? `cannot reach ${ORIGIN}. Check the network and try again.` : e.message));

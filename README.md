@@ -2,7 +2,7 @@
 
 **You ship it. Cliphouse shows it off.**
 
-Your coding agent turns every release into a video for your socials. It finds the selling points, picks the angle, writes the copy, and uses your brand colors. Free skill and MCP server for Claude Code, Codex, Cursor, Claude, and ChatGPT.
+Your coding agent turns every release into a video for your socials. It finds the selling points, picks the angle, writes the copy, and uses your brand colors and logo. Free skill and MCP server for Claude Code, Codex, Cursor, Claude, and ChatGPT.
 
 You can preview and edit without an account. MP4 download and editing more than 3 gallery templates need a free Google sign-in.
 
@@ -99,6 +99,7 @@ The cliphou.se deploy checks this skill against its MCP contract. If the install
 | Command | Does |
 | --- | --- |
 | `search --goal <goal> "<query>" [--aspect 9:16] [--max-seconds 20] [--inline]` | Finds templates for a marketing goal. `--inline` caches the preview MP4s and prints a Markdown grid. |
+| `logo [file]` | Uploads the project's logo (found automatically, or the file you name) and adds it to `cliphouse/brand.json`. Release and developer templates show it in place of the brand name. |
 | `tailor <id>... --brand <brand.json>` | Renders up to 4 templates with your brand in one server call, writes `cliphouse/<id>.props.json` for each, and prints a Markdown grid of the posters. |
 | `spec <id>` | Prints the editable text, colors, and limits. |
 | `preview <id> <props.json>` | Renders a poster of your product in the template on the server, and prints the editor link. |
