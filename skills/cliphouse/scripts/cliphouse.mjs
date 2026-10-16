@@ -6,6 +6,9 @@ import {tmpdir, homedir} from 'node:os';
 import {join} from 'node:path';
 
 const ORIGIN = (process.env.CLIPHOUSE_ORIGIN || 'https://cliphou.se').replace(/\/$/, '');
+const CONTRACT_VERSION = '2026-10-16.1';
+const GOALS = ['launch-product', 'announce-feature', 'share-update', 'grow-waitlist', 'announce-integration', 'announce-pricing',
+  'celebrate-milestone', 'share-social-proof', 'promote-event', 'introduce-brand', 'run-promotion', 'hire-team'];
 const ASPECTS = ['16:9', '9:16', '4:5', '1:1'];
 const ID = /^[a-z0-9-]{1,100}$/;
 // Codex visualization reference. The renderer needs the private-use delimiters
@@ -57,7 +60,7 @@ async function cached(id, ext) {
   return file;
 }
 
-const label = (r) => [r.aspect, r.seconds && `${r.seconds}s`, r.engine, r.music && 'music'].filter(Boolean).join(' · ');
+const label = (r) => [r.aspect, r.seconds && `${r.seconds}s`, r.music && 'music'].filter(Boolean).join(' · ');
 
 async function inline(results) {
   for (const r of results) {
@@ -161,9 +164,9 @@ function score(item, terms) {
 }
 
 const summarize = (item, spec) => ({
-  id: item.id, title: item.title, description: item.description,
+  id: item.id, title: item.title, description: item.description, goals: item.goals ?? [], goalLabels: item.goalLabels ?? [],
   aspect: spec?.format?.aspectRatio ?? item.aspect ?? null, seconds: spec?.format?.seconds ?? item.seconds ?? null,
-  engine: spec?.engine ?? item.engine ?? null, music: Boolean(spec?.music ?? item.music), creator: item.creator ?? null,
+  music: Boolean(spec?.music ?? item.music), creator: item.creator ?? null,
   poster: `${ORIGIN}/previews/${item.id}.jpg`, preview: `${ORIGIN}/previews/${item.id}.mp4`,
   page: `${ORIGIN}/templates/${item.id}/`, editor: `${ORIGIN}/#/v/${item.id}`,
 });
@@ -172,7 +175,7 @@ const summarize = (item, spec) => ({
 async function mcp(name, args, timeout = 15_000) {
   const res = await fetch(`${ORIGIN}/mcp`, {
     method: 'POST', signal: AbortSignal.timeout(timeout),
-    headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'User-Agent': 'cliphouse-skill/1.2'},
+    headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'User-Agent': `cliphouse-skill/${CONTRACT_VERSION}`},
     body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name, arguments: args}}),
   });
   const body = await res.json().catch(() => null);
@@ -183,30 +186,37 @@ async function mcp(name, args, timeout = 15_000) {
 }
 
 async function search(args) {
-  const opts = {limit: 6, aspect: null, maxSeconds: null, query: []};
+  const opts = {limit: 6, aspect: null, maxSeconds: null, goal: null, query: []};
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--aspect') opts.aspect = args[++i];
+    if (args[i] === '--goal') opts.goal = args[++i];
+    else if (args[i] === '--aspect') opts.aspect = args[++i];
     else if (args[i] === '--max-seconds') opts.maxSeconds = Number(args[++i]);
     else if (args[i] === '--limit') opts.limit = Math.min(Math.max(Number(args[++i]) || 6, 1), 20);
     else if (args[i] === '--inline') opts.inline = true;
     else opts.query.push(args[i]);
   }
   if (opts.aspect && !ASPECTS.includes(opts.aspect)) die(`--aspect must be one of ${ASPECTS.join(', ')}`);
+  if (opts.goal && !GOALS.includes(opts.goal)) die(`--goal must be one of ${GOALS.join(', ')}`);
   const query = opts.query.join(' ');
   // Server search first, so the skill and the MCP server rank the same way.
   try {
-    const {text, isError} = await mcp('search_templates', {query: query || undefined, aspect: opts.aspect ?? undefined,
+    const {text, isError} = await mcp('search_templates', {query: query || undefined, goal: opts.goal ?? undefined, aspect: opts.aspect ?? undefined,
       maxSeconds: opts.maxSeconds || undefined, limit: opts.limit});
     if (!isError) {
       const found = JSON.parse(text);
       if (found.searchId) remember(found.searchId);
+      const stale = found.contractVersion && found.contractVersion !== CONTRACT_VERSION;
       const results = (Array.isArray(found) ? found : found.results ?? []).map((r) => ({...summarize(r, null), ...r,
         poster: r.poster ?? `${ORIGIN}/previews/${r.id}.jpg`, preview: r.preview ?? `${ORIGIN}/previews/${r.id}.mp4`}));
       const markdown = opts.inline ? await inline(results) : undefined;
-      console.log(JSON.stringify({query, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'server', searchId: found.searchId, results, markdown}, null, 2));
+      console.log(JSON.stringify({query, goal: found.goal ?? opts.goal, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'server',
+        contractVersion: CONTRACT_VERSION, serverContractVersion: found.contractVersion ?? null,
+        ...(stale ? {warning: 'The installed cliphouse skill differs from cliphou.se. Update it with: npx skills add sunmer/cliphouse'} : {}),
+        searchId: found.searchId, results, markdown}, null, 2));
       return;
     }
   } catch {}
+  // Static fallback search cannot filter by goal yet, but it still finds templates on older deployments.
   const terms = words(query).filter((w) => !ASPECTS.includes(w)).map((w) => (SYNONYMS[w] ?? SYNONYMS[stem(w)] ?? [w]).map(stem));
   const items = await catalog();
   const ranked = items.map((item) => ({item, s: terms.length ? score(item, terms) : 1})).filter((r) => r.s > 0)
@@ -219,7 +229,8 @@ async function search(args) {
     .filter((r) => !opts.maxSeconds || !r.seconds || r.seconds <= opts.maxSeconds)
     .slice(0, opts.limit);
   const markdown = opts.inline ? await inline(results) : undefined;
-  console.log(JSON.stringify({query, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'local', catalogSize: items.length, results, markdown}, null, 2));
+  console.log(JSON.stringify({query, goal: opts.goal, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'local', contractVersion: CONTRACT_VERSION,
+    catalogSize: items.length, results, markdown}, null, 2));
 }
 
 async function spec([id]) {
@@ -232,7 +243,7 @@ async function spec([id]) {
   // local rendering lives in the separate cliphouse-render skill. The full spec stays at fullSpec.
   const instructions = (s.instructions ?? []).filter((line) => !/source\.(package|render)|render the source|download/i.test(line));
   console.log(JSON.stringify({
-    id: s.id, title: s.title, engine: s.engine, format: s.format, templateVersion: s.templateVersion,
+    id: s.id, title: s.title, format: s.format, templateVersion: s.templateVersion,
     editableFields: s.editableFields, props: s.props, music: s.music ?? null,
     handoff: s.handoff?.urlTemplate, credit: s.credit, instructions, fullSpec: `${ORIGIN}/templates/${id}/agent.json`,
   }, null, 2));
@@ -425,7 +436,7 @@ async function pick(args) {
     const s = specs[i];
     const r = summarize({id, title: s?.title ?? id}, s);
     return `<article><div class="media"><video src="${esc(r.preview)}" poster="${esc(r.poster)}" muted loop autoplay playsinline controls></video></div>
-<div class="meta"><span class="num">${i + 1}</span><div><h2>${esc(r.title)}</h2><p>${esc([r.aspect, r.seconds && `${r.seconds}s`, r.engine, r.music && 'music'].filter(Boolean).join(' · '))}</p></div></div>
+<div class="meta"><span class="num">${i + 1}</span><div><h2>${esc(r.title)}</h2><p>${esc(label(r))}</p></div></div>
 <div class="actions"><button data-copy="$cliphouse: use template ${esc(id)} and fill it for this project">Copy pick</button><a href="${esc(r.page)}" target="_blank" rel="noopener">Page</a><a href="${esc(r.editor)}" target="_blank" rel="noopener">Editor</a></div></article>`;
   }).join('\n');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>cliphou.se picks</title>

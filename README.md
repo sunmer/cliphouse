@@ -1,8 +1,8 @@
 # cliphou.se
 
-**Launch videos for what you ship.**
+**You build the product. cliphou.se helps market it in video.**
 
-Find a motion graphics template inside your coding agent or chat app, fill it from your repo, and get an editable video. Free, MIT-0, no account.
+Pick a marketing goal in your coding agent or chat app, fill a proven motion graphics template from your repo, and get an editable video. Free, MIT-0, no account.
 
 [![Demo: a coding agent suggests launch video templates, the user picks one, and the agent fills it from the repo](demo.gif)](https://github.com/sunmer/cliphouse/releases/download/demo-v1/cliphouse-agent-demo.mp4)
 
@@ -91,9 +91,13 @@ In Codex, type `$cliphouse` to call the skill directly.
 
 `skills/cliphouse/scripts/cliphouse.mjs` talks to the public cliphou.se catalog over HTTPS. Search uses the cliphou.se MCP server, so the skill and the MCP tools rank templates the same way.
 
+Goals: `launch-product`, `announce-feature`, `share-update`, `grow-waitlist`, `announce-integration`, `announce-pricing`, `celebrate-milestone`, `share-social-proof`, `promote-event`, `introduce-brand`, `run-promotion`, and `hire-team`.
+
+The cliphou.se deploy checks this skill against its MCP contract. If the installed skill is older than the server, search returns a warning with the update command.
+
 | Command | Does |
 | --- | --- |
-| `search "<query>" [--aspect 9:16] [--max-seconds 20] [--inline]` | Finds templates. `--inline` caches the preview MP4s and prints a Markdown grid. |
+| `search --goal <goal> "<query>" [--aspect 9:16] [--max-seconds 20] [--inline]` | Finds templates for a marketing goal. `--inline` caches the preview MP4s and prints a Markdown grid. |
 | `tailor <id>... --brand <brand.json>` | Renders up to 4 templates with your brand in one server call, writes `cliphouse/<id>.props.json` for each, and prints a Markdown grid of the posters. |
 | `spec <id>` | Prints the editable text, colors, and limits. |
 | `preview <id> <props.json>` | Renders a poster of your product in the template on the server, and prints the editor link. |
