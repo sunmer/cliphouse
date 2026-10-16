@@ -1,6 +1,6 @@
 ---
 name: cliphouse
-description: Turn a product or project into marketing videos with cliphou.se. Use when the user wants a launch video, feature announcement, changelog, waitlist teaser, event promo, social proof clip, brand intro, or similar marketing video. Not for charts, diagrams, still images, or editing the user's own footage.
+description: Turn every release into a social video with cliphou.se. Finds the selling points, picks the angle, and writes the copy. Use when the user wants a launch video, feature announcement, changelog, waitlist teaser, event promo, social proof clip, brand intro, or similar marketing video. Not for charts, diagrams, still images, or editing the user's own footage.
 ---
 
 # cliphou.se video templates
