@@ -1,11 +1,13 @@
 ---
 name: cliphouse
-description: Find and customize ready-made motion graphics video templates from cliphou.se, preview them in the chat, and fill them from the project. Use when the user wants a video for a product, project, or announcement, such as a launch video, promo, intro, social reel, logo reveal, or teaser. Not for charts, diagrams, still images, or editing the user's own footage.
+description: Turn a product or project into marketing videos with cliphou.se. Use when the user wants a launch video, feature announcement, changelog, waitlist teaser, event promo, social proof clip, brand intro, or similar marketing video. Not for charts, diagrams, still images, or editing the user's own footage.
 ---
 
 # cliphou.se video templates
 
-cliphou.se is a free library of editable motion graphics templates (MIT-0). Each template has a JSON spec with editable text and colors. The result is a cliphou.se editor link, where the user previews the video and exports the MP4. The helper script needs Node 18+ and no install.
+cliphou.se turns what the user builds into marketing videos. It uses editable motion graphics templates (MIT-0). Each template has a JSON spec with editable text and colors. The result is a cliphou.se editor link, where the user previews the video and exports the MP4. The helper script needs Node 18+ and no install.
+
+Contract version: `2026-10-16.1`.
 
 Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the directory that contains this file.
 
@@ -20,9 +22,22 @@ What the helper does:
 1. **Learn the project first.** Before you search, read the README, `package.json`, or the landing page. Collect the product name, a short tagline, 3 key features or numbers, the call to action, and brand colors (CSS variables, Tailwind config, logo SVG). Do not ask the user for facts that the repo already contains. Write them to `cliphouse/brand.json` in the project:
    `{"name": "...", "headline": "...", "subhead": "...", "points": ["...", "...", "..."], "cta": "...", "theme": {"background": "#RRGGBB", "surface": "#RRGGBB", "foreground": "#RRGGBB", "accent": "#RRGGBB", "accent2": "#RRGGBB"}}`
    Only `name` is required. Keep points to short phrases. Add `"date"` only when the project states one. Never invent numbers. Keep good contrast between `foreground` and `background`.
-2. **Search.** Write a short query from the request and the project, for example `product launch developer tool`. Add `--aspect 16:9|9:16|4:5|1:1` or `--max-seconds N` only when the user or the destination implies one (vertical for Reels and TikTok, 16:9 for YouTube and websites).
-   `node <skill-dir>/scripts/cliphouse.mjs search "<query>" [--aspect 9:16] [--max-seconds 20] [--limit 6]`
-   When there are no results, retry once with broader words. Then tell the user what is missing.
+2. **Choose the goal and search.** Choose one marketing goal from the request and the project:
+   - `launch-product`: launch a product or make it publicly available.
+   - `announce-feature`: announce one new feature, API, model, or docs release.
+   - `share-update`: share a changelog, version, roadmap, migration, incident, or security update.
+   - `grow-waitlist`: promote a waitlist, early access, coming-soon page, or countdown.
+   - `announce-integration`: announce an integration or partnership.
+   - `announce-pricing`: announce pricing, plans, or a comparison.
+   - `celebrate-milestone`: share a metric, growth result, benchmark, or anniversary.
+   - `share-social-proof`: share a testimonial, case study, quote, or contributors.
+   - `promote-event`: promote an event, webinar, livestream, talk, or hackathon.
+   - `introduce-brand`: introduce a brand or reveal its logo.
+   - `run-promotion`: promote a sale, discount, giveaway, or limited drop.
+   - `hire-team`: announce hiring or a new team member.
+   Write a short product or style query, for example `developer tool` or `minimal dark`. Add `--aspect 16:9|9:16|4:5|1:1` or `--max-seconds N` only when the user or destination implies one (vertical for Reels and TikTok, 16:9 for YouTube and websites).
+   `node <skill-dir>/scripts/cliphouse.mjs search --goal <goal> "<query>" [--aspect 9:16] [--max-seconds 20] [--limit 6]`
+   When there are no results, retry once with a broader query and the same goal. Then retry without the query. Then tell the user what is missing. Do not ask the user to choose Remotion or HyperFrames. If search returns `warning`, tell the user to update the skill with `npx skills add sunmer/cliphouse`.
 3. **Show the options with the user's product in them.** Pick the best 3 results. Prefer templates that do not need numbers the project lacks. Render all 3 with the brand in one call:
    `node <skill-dir>/scripts/cliphouse.mjs tailor <id1> <id2> <id3> --brand cliphouse/brand.json`
    It takes a few seconds, writes `cliphouse/<id>.props.json` for each template, prints a `markdown` grid of posters, and starts 4-second animated loops of each option on the server.
@@ -31,7 +46,7 @@ What the helper does:
    - When `animated` is false, the grid shows still posters. Do not mention it.
    - When `tailored` is false, the grid shows stock previews instead. Say so in one short line.
    - Add `--no-loop` to `tailor`, and skip `animate`, when the user wants faster results or the host cannot show images.
-   - **Terminal only (no inline media).** List the options as a numbered list with title, aspect, length, and the `page` link. Then ask if the user wants a side-by-side preview page in the browser. Only when they say yes, run `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`. It prints a file path and does not open it. Open it only with the user's permission, or give them the path.
+   - **Terminal only (no inline media).** List the options as a numbered list with title, aspect, length, and the `page` link. Do not show the rendering engine. Then ask if the user wants a side-by-side preview page in the browser. Only when they say yes, run `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`. It prints a file path and does not open it. Open it only with the user's permission, or give them the path.
 
    Under the grid, add at most one short line on why these fit. Ask the user to reply with a number.
 4. **Fill the template.** Run `node <skill-dir>/scripts/cliphouse.mjs spec <id>`. Start from `cliphouse/<id>.props.json`, which `tailor` already filled. Its `keptSample` list names the text fields that still hold the template's sample text: replace those with real facts from the project, or tell the user which ones you could not fill. Change only `props.texts`, `props.theme`, and `props.media` (and `hidden`/`audio` for music templates). Keep every text within its `maxLength` and every color as `#RRGGBB`. Write the props back to `cliphouse/<id>.props.json`.
