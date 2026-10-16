@@ -3,9 +3,12 @@
   "notGrouped": "bottom",
   "groupings": [
     {
-      "title": "Video",
-      "description": "Launch videos for what you ship. Pick a motion graphics template in your agent, fill it from your repo, and get an editable video.",
-      "skills": ["cliphouse", "cliphouse-render"]
+      "title": "Release videos",
+      "description": "Turn every release into a social video, right in your coding agent. Free skill and MCP server for Claude Code, Codex, Cursor, Claude, and ChatGPT.",
+      "skills": [
+        "cliphouse",
+        "cliphouse-render"
+      ]
     }
   ]
 }
