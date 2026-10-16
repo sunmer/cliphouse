@@ -23,11 +23,14 @@ What the helper does:
 2. **Search.** Write a short query from the request and the project, for example `product launch developer tool`. Add `--aspect 16:9|9:16|4:5|1:1` or `--max-seconds N` only when the user or the destination implies one (vertical for Reels and TikTok, 16:9 for YouTube and websites).
    `node <skill-dir>/scripts/cliphouse.mjs search "<query>" [--aspect 9:16] [--max-seconds 20] [--limit 6]`
    When there are no results, retry once with broader words. Then tell the user what is missing.
-3. **Show the options with the user's product in them.** Pick the best 4 results. Prefer templates that do not need numbers the project lacks. Render all 4 with the brand in one call:
-   `node <skill-dir>/scripts/cliphouse.mjs tailor <id1> <id2> <id3> <id4> --brand cliphouse/brand.json`
-   It takes a few seconds, writes `cliphouse/<id>.props.json` for each template, and prints a `markdown` grid.
-   - **Markdown grid (Codex desktop and other apps that render media).** Copy the `markdown` field into your reply exactly as given. It is a 2-column table of titles and posters that show the user's product. Do not wrap it in a code block, and do not change the paths. Do not use a `visualize` reference.
+3. **Show the options with the user's product in them.** Pick the best 3 results. Prefer templates that do not need numbers the project lacks. Render all 3 with the brand in one call:
+   `node <skill-dir>/scripts/cliphouse.mjs tailor <id1> <id2> <id3> --brand cliphouse/brand.json`
+   It takes a few seconds, writes `cliphouse/<id>.props.json` for each template, prints a `markdown` grid of posters, and starts 4-second animated loops of each option on the server.
+   - **Animate the grid.** When `loops` is `"rendering"`, run `node <skill-dir>/scripts/cliphouse.mjs animate <id1> <id2> <id3>` right away, in the same turn. It waits up to about 2 minutes for the loops and prints the grid again with animated loops. Use its `markdown` in your reply. If `animate` fails, or its `loops` is not `"ready"`, use the poster grid from `tailor`. When `loops` is `"none"`, skip `animate`.
+   - **Markdown grid (Codex desktop and other apps that render media).** Copy the `markdown` field into your reply exactly as given. It is a 2-column table of titles and animated loops (or posters) that show the user's product. Do not wrap it in a code block, and do not change the paths. Do not use a `visualize` reference.
+   - When `animated` is false, the grid shows still posters. Do not mention it.
    - When `tailored` is false, the grid shows stock previews instead. Say so in one short line.
+   - Add `--no-loop` to `tailor`, and skip `animate`, when the user wants faster results or the host cannot show images.
    - **Terminal only (no inline media).** List the options as a numbered list with title, aspect, length, and the `page` link. Then ask if the user wants a side-by-side preview page in the browser. Only when they say yes, run `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`. It prints a file path and does not open it. Open it only with the user's permission, or give them the path.
 
    Under the grid, add at most one short line on why these fit. Ask the user to reply with a number.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // cliphou.se helper for coding agents. Node 18+, no dependencies.
-// Commands: search, spec, tailor, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
+// Commands: search, spec, tailor, animate, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
 import {writeFileSync, mkdtempSync, readFileSync, mkdirSync, existsSync} from 'node:fs';
 import {tmpdir, homedir} from 'node:os';
 import {join} from 'node:path';
@@ -322,40 +322,86 @@ function savePoster(poster, image) {
   return local;
 }
 
+// Download a personalized loop from <origin>/p/<sha256>.webp into the cache, so the chat shows it from a local file.
+async function saveLoop(video) {
+  const name = typeof video === 'string' && video.startsWith(`${ORIGIN}/p/`) ? video.split('/').pop() : '';
+  if (!/^[a-f0-9]{64}\.webp$/.test(name)) return null;
+  const local = join(CACHE, `loop-${name}`);
+  if (existsSync(local)) return local;
+  const res = await fetch(video, {signal: AbortSignal.timeout(20_000)}).catch(() => null);
+  if (!res?.ok || res.headers.get('content-type') !== 'image/webp') return null;
+  const bytes = Buffer.from(await res.arrayBuffer());
+  // RIFF....WEBP header, and a size cap, so only a real WebP is written.
+  if (bytes.length > 2_000_000 || bytes.toString('latin1', 0, 4) !== 'RIFF' || bytes.toString('latin1', 8, 12) !== 'WEBP') return null;
+  mkdirSync(CACHE, {recursive: true});
+  writeFileSync(local, bytes);
+  return local;
+}
+
 // Render the shortlisted templates with the project's brand, so the grid already shows the user's product.
 // Writes cliphouse/<id>.props.json for each template, so the fill step starts from the tailored props.
 async function tailor(args) {
+  // Step 1: posters now, loops start rendering on the server. Step 2 is `animate`.
+  const loop = !args.includes('--no-loop');
+  args = args.filter((a) => a !== '--no-loop');
   const brandIndex = args.indexOf('--brand');
   const file = brandIndex >= 0 ? args[brandIndex + 1] : null;
   const ids = args.filter((a, i) => brandIndex < 0 || (i !== brandIndex && i !== brandIndex + 1));
-  if (!file || !ids.length || ids.length > 4 || ids.some((id) => !ID.test(id))) die('usage: tailor <id1> [id2 id3 id4] --brand <brand.json | ->');
+  if (!file || !ids.length || ids.length > 4 || ids.some((id) => !ID.test(id))) die('usage: tailor <id1> [id2 id3 id4] --brand <brand.json | -> [--no-loop]');
   const brand = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
+  await gallery(ids, brand, loop ? 'start' : undefined, 40_000);
+}
+
+// Step 2: wait for the loops started by `tailor` and print the grid again, animated. It reuses the brand
+// that `tailor` saved, so the server finds the same cached posters and the same loops.
+async function animate(args) {
+  const ids = args.filter((a) => ID.test(a));
+  if (!ids.length || ids.length > 4 || ids.length !== args.length) die('usage: animate <id1> [id2 id3 id4]');
+  let brand;
+  try { brand = JSON.parse(readFileSync(join('cliphouse', '.brand.json'), 'utf8')); }
+  catch { die('run tailor first'); }
+  // The server waits up to 45 s per call and keeps rendering; a second call picks up the rest.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const done = await gallery(ids, brand, true, 70_000, attempt === 0);
+    if (done) return;
+  }
+}
+
+// Prints the grid and returns true when nothing is left rendering. With quiet, an unfinished
+// result is not printed, so the caller can try again and print once.
+async function gallery(ids, brand, loop, timeout, quiet = false) {
   const started = Date.now();
   let result;
-  try { result = await mcp('render_previews', {variantIds: ids, brand, searchId: lastSearch()}, 40_000); }
+  try { result = await mcp('render_previews', {variantIds: ids, brand, ...(loop === undefined ? {} : {loop}), searchId: lastSearch()}, timeout); }
   catch (e) { result = {isError: true, text: e.message, unavailable: true}; }
   // Older servers or a failure: fall back to the stock grid, so the user still sees the options.
   if (result.isError && (result.unavailable || /not found|unknown tool/i.test(result.text))) {
     const items = ids.map((id) => ({id, title: id, localPreview: null, preview: `${ORIGIN}/previews/${id}.mp4`}));
     for (const r of items) r.localPreview = await cached(r.id, 'mp4').catch(() => null);
     console.log(JSON.stringify({tailored: false, message: 'Tailored previews are not available. Showing stock previews.', markdown: grid(items)}, null, 2));
-    return;
+    return true;
   }
   if (result.isError) die(`brand rejected: ${result.text}`);
   const {results} = JSON.parse(result.text);
   const images = [...(result.images ?? [])];
   mkdirSync('cliphouse', {recursive: true});
+  writeFileSync(join('cliphouse', '.brand.json'), `${JSON.stringify(brand)}\n`);
   const items = [];
   for (const r of results) {
     const local = r.poster ? savePoster(r.poster, images.shift()) : null;
-    const fallback = local ? null : await cached(r.id, 'mp4').catch(() => null);
+    const animated = r.video ? await saveLoop(r.video) : null;
+    const fallback = local || animated ? null : await cached(r.id, 'mp4').catch(() => null);
     const propsFile = join('cliphouse', `${r.id}.props.json`);
     writeFileSync(propsFile, `${JSON.stringify(r.props, null, 2)}\n`);
-    items.push({id: r.id, title: r.title, aspect: r.aspect, tailored: Boolean(local), localPreview: local ?? fallback, preview: r.stockPoster,
-      editor: r.editor, propsFile, keptSample: r.keptSample ?? []});
+    items.push({id: r.id, title: r.title, aspect: r.aspect, tailored: Boolean(local || animated), animated: Boolean(animated), pending: Boolean(r.videoPending),
+      localPreview: animated ?? local ?? fallback, preview: r.stockPoster, editor: r.editor, propsFile, keptSample: r.keptSample ?? []});
   }
-  console.log(JSON.stringify({tailored: items.some((i) => i.tailored), results: items, markdown: grid(items),
+  // loops: "rendering" means `animate` should run next; "none" means skip it (old server, --no-loop, or failed loops).
+  const loops = items.some((i) => i.pending) ? 'rendering' : items.some((i) => i.animated) ? 'ready' : 'none';
+  if (quiet && loops === 'rendering') return false;
+  console.log(JSON.stringify({tailored: items.some((i) => i.tailored), animated: items.some((i) => i.animated), loops, results: items, markdown: grid(items),
     seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
+  return true;
 }
 
 // Two-column Markdown table: a title row, then a media row, for each pair.
@@ -397,6 +443,6 @@ button,a{font:inherit;color:#eceae4;background:#262a31;border:1px solid #333944;
 }
 
 const [command, ...rest] = process.argv.slice(2);
-const commands = {search, spec, tailor, preview, link, pick, picker};
-if (!commands[command]) die('usage: cliphouse.mjs <search|spec|tailor|preview|link|pick|picker> ...');
+const commands = {search, spec, tailor, animate, preview, link, pick, picker};
+if (!commands[command]) die('usage: cliphouse.mjs <search|spec|tailor|animate|preview|link|pick|picker> ...');
 commands[command](rest).catch((e) => die(/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|abort/i.test(`${e.message} ${e.cause?.code ?? ''}`) ? `cannot reach ${ORIGIN}. Check the network and try again.` : e.message));
