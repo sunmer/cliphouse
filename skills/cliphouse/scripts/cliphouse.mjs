@@ -322,17 +322,36 @@ function savePoster(poster, image) {
   return local;
 }
 
+// Download a personalized loop from <origin>/p/<sha256>.webp into the cache, so the chat shows it from a local file.
+async function saveLoop(video) {
+  const name = typeof video === 'string' && video.startsWith(`${ORIGIN}/p/`) ? video.split('/').pop() : '';
+  if (!/^[a-f0-9]{64}\.webp$/.test(name)) return null;
+  const local = join(CACHE, `loop-${name}`);
+  if (existsSync(local)) return local;
+  const res = await fetch(video, {signal: AbortSignal.timeout(20_000)}).catch(() => null);
+  if (!res?.ok || res.headers.get('content-type') !== 'image/webp') return null;
+  const bytes = Buffer.from(await res.arrayBuffer());
+  // RIFF....WEBP header, and a size cap, so only a real WebP is written.
+  if (bytes.length > 2_000_000 || bytes.toString('latin1', 0, 4) !== 'RIFF' || bytes.toString('latin1', 8, 12) !== 'WEBP') return null;
+  mkdirSync(CACHE, {recursive: true});
+  writeFileSync(local, bytes);
+  return local;
+}
+
 // Render the shortlisted templates with the project's brand, so the grid already shows the user's product.
 // Writes cliphouse/<id>.props.json for each template, so the fill step starts from the tailored props.
 async function tailor(args) {
+  const loop = !args.includes('--no-loop');
+  args = args.filter((a) => a !== '--no-loop');
   const brandIndex = args.indexOf('--brand');
   const file = brandIndex >= 0 ? args[brandIndex + 1] : null;
   const ids = args.filter((a, i) => brandIndex < 0 || (i !== brandIndex && i !== brandIndex + 1));
-  if (!file || !ids.length || ids.length > 4 || ids.some((id) => !ID.test(id))) die('usage: tailor <id1> [id2 id3 id4] --brand <brand.json | ->');
+  if (!file || !ids.length || ids.length > 4 || ids.some((id) => !ID.test(id))) die('usage: tailor <id1> [id2 id3 id4] --brand <brand.json | -> [--no-loop]');
   const brand = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
   const started = Date.now();
   let result;
-  try { result = await mcp('render_previews', {variantIds: ids, brand, searchId: lastSearch()}, 40_000); }
+  // Loops take longer than posters; the server returns posters even when a loop is not ready.
+  try { result = await mcp('render_previews', {variantIds: ids, brand, ...(loop ? {loop: true} : {}), searchId: lastSearch()}, loop ? 70_000 : 40_000); }
   catch (e) { result = {isError: true, text: e.message, unavailable: true}; }
   // Older servers or a failure: fall back to the stock grid, so the user still sees the options.
   if (result.isError && (result.unavailable || /not found|unknown tool/i.test(result.text))) {
@@ -348,13 +367,14 @@ async function tailor(args) {
   const items = [];
   for (const r of results) {
     const local = r.poster ? savePoster(r.poster, images.shift()) : null;
-    const fallback = local ? null : await cached(r.id, 'mp4').catch(() => null);
+    const animated = r.video ? await saveLoop(r.video) : null;
+    const fallback = local || animated ? null : await cached(r.id, 'mp4').catch(() => null);
     const propsFile = join('cliphouse', `${r.id}.props.json`);
     writeFileSync(propsFile, `${JSON.stringify(r.props, null, 2)}\n`);
-    items.push({id: r.id, title: r.title, aspect: r.aspect, tailored: Boolean(local), localPreview: local ?? fallback, preview: r.stockPoster,
-      editor: r.editor, propsFile, keptSample: r.keptSample ?? []});
+    items.push({id: r.id, title: r.title, aspect: r.aspect, tailored: Boolean(local || animated), animated: Boolean(animated),
+      localPreview: animated ?? local ?? fallback, preview: r.stockPoster, editor: r.editor, propsFile, keptSample: r.keptSample ?? []});
   }
-  console.log(JSON.stringify({tailored: items.some((i) => i.tailored), results: items, markdown: grid(items),
+  console.log(JSON.stringify({tailored: items.some((i) => i.tailored), animated: items.some((i) => i.animated), results: items, markdown: grid(items),
     seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
 }
 
