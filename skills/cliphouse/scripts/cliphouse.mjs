@@ -6,9 +6,11 @@ import {tmpdir, homedir} from 'node:os';
 import {extname, join} from 'node:path';
 
 const ORIGIN = (process.env.CLIPHOUSE_ORIGIN || 'https://cliphou.se').replace(/\/$/, '');
-const CONTRACT_VERSION = '2026-10-17.1';
+const CONTRACT_VERSION = '2026-10-18.1';
 const GOALS = ['launch-product', 'announce-feature', 'share-update', 'grow-waitlist', 'announce-integration', 'announce-pricing',
   'celebrate-milestone', 'share-social-proof', 'promote-event', 'introduce-brand', 'run-promotion', 'hire-team'];
+const MOMENTS = ['most-requested-feature', 'generally-available', 'limit-raised', 'faster', 'manual-step-removed', 'integration-live',
+  'pricing-changed', 'reliability-fix', 'new-language-or-region', 'new-platform', 'free-resource', 'milestone'];
 const ASPECTS = ['16:9', '9:16', '4:5', '1:1'];
 const ID = /^[a-z0-9-]{1,100}$/;
 // Codex visualization reference. The renderer needs the private-use delimiters
@@ -156,7 +158,7 @@ function score(item, terms) {
 }
 
 const summarize = (item, spec) => ({
-  id: item.id, title: item.title, description: item.description, goals: item.goals ?? [], goalLabels: item.goalLabels ?? [],
+  id: item.id, title: item.title, description: item.description, goals: item.goals ?? [], goalLabels: item.goalLabels ?? [], moments: item.moments ?? spec?.moments ?? [],
   aspect: spec?.format?.aspectRatio ?? item.aspect ?? null, seconds: spec?.format?.seconds ?? item.seconds ?? null,
   music: Boolean(spec?.music ?? item.music), creator: item.creator ?? null,
   poster: `${ORIGIN}/previews/${item.id}.jpg`, preview: `${ORIGIN}/previews/${item.id}.mp4`,
@@ -178,9 +180,10 @@ async function mcp(name, args, timeout = 15_000) {
 }
 
 async function search(args) {
-  const opts = {limit: 6, aspect: null, maxSeconds: null, goal: null, query: []};
+  const opts = {limit: 6, aspect: null, maxSeconds: null, goal: null, moment: null, query: []};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--goal') opts.goal = args[++i];
+    else if (args[i] === '--moment') opts.moment = args[++i];
     else if (args[i] === '--aspect') opts.aspect = args[++i];
     else if (args[i] === '--max-seconds') opts.maxSeconds = Number(args[++i]);
     else if (args[i] === '--limit') opts.limit = Math.min(Math.max(Number(args[++i]) || 6, 1), 20);
@@ -189,10 +192,11 @@ async function search(args) {
   }
   if (opts.aspect && !ASPECTS.includes(opts.aspect)) die(`--aspect must be one of ${ASPECTS.join(', ')}`);
   if (opts.goal && !GOALS.includes(opts.goal)) die(`--goal must be one of ${GOALS.join(', ')}`);
+  if (opts.moment && !MOMENTS.includes(opts.moment)) die(`--moment must be one of ${MOMENTS.join(', ')}`);
   const query = opts.query.join(' ');
   // Server search first, so the skill and the MCP server rank the same way.
   try {
-    const {text, isError} = await mcp('search_templates', {query: query || undefined, goal: opts.goal ?? undefined, aspect: opts.aspect ?? undefined,
+    const {text, isError} = await mcp('search_templates', {query: query || undefined, goal: opts.goal ?? undefined, moment: opts.moment ?? undefined, aspect: opts.aspect ?? undefined,
       maxSeconds: opts.maxSeconds || undefined, limit: opts.limit});
     if (!isError) {
       const found = JSON.parse(text);
@@ -201,14 +205,15 @@ async function search(args) {
       const results = (Array.isArray(found) ? found : found.results ?? []).map((r) => ({...summarize(r, null), ...r,
         poster: r.poster ?? `${ORIGIN}/previews/${r.id}.jpg`, preview: r.preview ?? `${ORIGIN}/previews/${r.id}.mp4`}));
       const markdown = opts.inline ? await inline(results) : undefined;
-      console.log(JSON.stringify({query, goal: found.goal ?? opts.goal, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'server',
+      console.log(JSON.stringify({query, goal: found.goal ?? opts.goal, moment: found.moment ?? opts.moment, detectedMoments: found.detectedMoments ?? [],
+        filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'server',
         contractVersion: CONTRACT_VERSION, serverContractVersion: found.contractVersion ?? null,
         ...(stale ? {warning: 'The installed cliphouse skill differs from cliphou.se. Update it with: npx skills add sunmer/cliphouse'} : {}),
         searchId: found.searchId, results, markdown}, null, 2));
       return;
     }
   } catch {}
-  // Static fallback search cannot filter by goal yet, but it still finds templates on older deployments.
+  // Static fallback search cannot filter by goal or moment yet, but it still finds templates on older deployments.
   const terms = words(query).filter((w) => !ASPECTS.includes(w)).map((w) => (SYNONYMS[w] ?? SYNONYMS[stem(w)] ?? [w]).map(stem));
   const items = await catalog();
   const ranked = items.map((item) => ({item, s: terms.length ? score(item, terms) : 1})).filter((r) => r.s > 0)
@@ -221,7 +226,7 @@ async function search(args) {
     .filter((r) => !opts.maxSeconds || !r.seconds || r.seconds <= opts.maxSeconds)
     .slice(0, opts.limit);
   const markdown = opts.inline ? await inline(results) : undefined;
-  console.log(JSON.stringify({query, goal: opts.goal, filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'local', contractVersion: CONTRACT_VERSION,
+  console.log(JSON.stringify({query, goal: opts.goal, moment: opts.moment, detectedMoments: [], filters: {aspect: opts.aspect, maxSeconds: opts.maxSeconds}, source: 'local', contractVersion: CONTRACT_VERSION,
     catalogSize: items.length, results, markdown}, null, 2));
 }
 

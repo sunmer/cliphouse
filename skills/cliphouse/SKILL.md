@@ -9,7 +9,7 @@ cliphou.se turns what the user builds into marketing videos. It uses editable mo
 
 Most users are developers and small teams with no marketer. Act as their marketer: find the selling points, pick the angle, and write copy that sells. Do not just copy the README.
 
-Contract version: `2026-10-17.1`.
+Contract version: `2026-10-18.1`.
 
 Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the directory that contains this file.
 
@@ -32,7 +32,20 @@ What the helper does:
    - **What shipped:** the one change this video is about.
    - **Angle and hook:** one of a pain ("Still writing YAML?"), a question, a number ("0 config files"), or a before/after.
    Write `headline` as the hook, `subhead` as who it is for and what it solves, and `points` as benefits backed by real features ("Search is 3x faster", not "New search index"). Use only facts from the project: never invent numbers, customers, or quotes. Tell the user the angle in one line before the grid, so they can redirect it.
-2. **Choose the goal and search.** Choose one marketing goal from the request and the project:
+2. **Find release moments, choose the goal, and search.** Read the release for two or three shareable moments. Name a moment only when the project has facts for it. Suggest the strongest moment to the user in one line:
+   - `most-requested-feature`: a feature users clearly asked for has shipped.
+   - `generally-available`: a feature or product is now available to everyone or out of beta.
+   - `limit-raised`: a limit, quota, or constraint was raised or removed.
+   - `faster`: a measured task got faster.
+   - `manual-step-removed`: users no longer do a manual step.
+   - `integration-live`: an integration is live.
+   - `pricing-changed`: plans, prices, or billing changed.
+   - `reliability-fix`: a bug, crash, outage, or stability problem was fixed.
+   - `new-language-or-region`: a new language, country, or region is supported.
+   - `new-platform`: the product runs on a new platform, such as mobile, desktop, CLI, or SDK.
+   - `free-resource`: a free tool, template, guide, or open-source project was released.
+   - `milestone`: a real measured milestone was reached.
+   Then choose one marketing goal from the request and the project:
    - `launch-product`: launch a product or make it publicly available.
    - `announce-feature`: announce one new feature, API, model, or docs release.
    - `share-update`: share a changelog, version, roadmap, migration, incident, or security update.
@@ -46,8 +59,8 @@ What the helper does:
    - `run-promotion`: promote a sale, discount, giveaway, or limited drop.
    - `hire-team`: announce hiring or a new team member.
    Write a short product or style query, for example `developer tool` or `minimal dark`. Add `--aspect 16:9|9:16|4:5|1:1` or `--max-seconds N` only when the user or destination implies one (vertical for Reels and TikTok, 16:9 for YouTube and websites).
-   `node <skill-dir>/scripts/cliphouse.mjs search --goal <goal> "<query>" [--aspect 9:16] [--max-seconds 20] [--limit 6]`
-   When there are no results, retry once with a broader query and the same goal. Then retry without the query. Then tell the user what is missing. Do not ask the user to choose Remotion or HyperFrames. If search returns `warning`, tell the user to update the skill with `npx skills add sunmer/cliphouse`.
+   `node <skill-dir>/scripts/cliphouse.mjs search --goal <goal> [--moment <moment>] "<query>" [--aspect 9:16] [--max-seconds 20] [--limit 6]`
+   Pass `--moment` only for a moment backed by project facts. Without such facts, search by goal. `detectedMoments` are hints from the query; check them against the project before you use one. When there are no results, retry once with a broader query and the same goal and moment. Then retry without the query. Then retry without the moment. Then tell the user what is missing. Do not ask the user to choose Remotion or HyperFrames. If search returns `warning`, tell the user to update the skill with `npx skills add sunmer/cliphouse`.
 3. **Show the options with the user's product in them.** Pick the best 3 results. Prefer templates whose structure fits the angle (a problem-and-fix hook, a quickstart, a comparison), and templates that do not need numbers the project lacks. **Skip results with `fixedSampleContent`.** Those templates draw numbers that no field can change, such as "99 Score", and the video would show them next to the user's brand. Use one only when the project has matching numbers or the user accepts them.
    **Check the copy first.** Run `node <skill-dir>/scripts/cliphouse.mjs fit <id1> <id2> <id3> --brand cliphouse/brand.json`. It prints each template's text limits and every brand field that is too long (`tooLong`). When `ok` is false, rewrite those fields in `brand.json` so they fit the shortest limit, as complete phrases, and run `fit` again. A shorter phrase beats one that is cut off.
    Then render all 3 with the brand in one call:
