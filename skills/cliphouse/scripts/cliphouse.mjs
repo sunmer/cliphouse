@@ -66,15 +66,7 @@ async function inline(results) {
   for (const r of results) {
     [r.localPreview, r.localPoster] = await Promise.all([cached(r.id, 'mp4'), cached(r.id, 'jpg')]).catch(() => [null, null]);
   }
-  // Two-column table: a title row, then a video row, for each pair.
-  const cell = (r, i) => (r ? `**${i + 1}. ${r.title.replace(/\|/g, '-')}**` : ' ');
-  const media = (r) => (r ? (r.localPreview ? `![${r.title.replace(/[\]|]/g, '')}](${r.localPreview})` : `[Preview](${r.preview})`) : ' ');
-  const rows = [];
-  for (let i = 0; i < results.length; i += 2) {
-    const [a, b] = [results[i], results[i + 1]];
-    rows.push(`| ${cell(a, i)} | ${cell(b, i + 1)} |`, ...(i === 0 ? ['| --- | --- |'] : []), `| ${media(a)} | ${media(b)} |`);
-  }
-  return rows.join('\n');
+  return grid(results);
 }
 
 // Self-contained in-chat picker. Media is inlined as data URLs because the chat sandbox blocks other origins.
@@ -486,19 +478,29 @@ async function gallery(ids, brand, loop, timeout, quiet = false) {
   // loops: "rendering" means `animate` should run next; "none" means skip it (old server, --no-loop, or failed loops).
   const loops = items.some((i) => i.pending) ? 'rendering' : items.some((i) => i.animated) ? 'ready' : 'none';
   if (quiet && loops === 'rendering') return false;
-  console.log(JSON.stringify({tailored: items.some((i) => i.tailored), animated: items.some((i) => i.animated), loops, results: items, markdown: grid(items),
+  console.log(JSON.stringify({tailored: items.some((i) => i.tailored), animated: items.some((i) => i.animated), loops, results: items,
+    links: links(items), markdown: grid(items),
     seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
   return true;
 }
 
-// Two-column Markdown table: a title row, then a media row, for each pair.
+// Numbered list of the options, each title linked to its editor. It goes first in the reply: the editor
+// plays the full video at full quality on every device, including phones where inline loops do not play.
+function links(items) {
+  return items.map((r, i) => `${i + 1}. [${String(r.title).replace(/[\]|]/g, '')}](${r.editor})${r.aspect ? ` (${r.aspect})` : ''}`).join('\n');
+}
+
+// Markdown table with up to three options per row: a title row, then a media row.
+const GRID_COLUMNS = 3;
 function grid(items) {
   const cell = (r, i) => (r ? `**${i + 1}. ${String(r.title).replace(/\|/g, '-')}**` : ' ');
   const media = (r) => (r ? (r.localPreview ? `![${String(r.title).replace(/[\]|]/g, '')}](${r.localPreview})` : `[Preview](${r.preview})`) : ' ');
+  const columns = Math.min(GRID_COLUMNS, Math.max(1, items.length));
+  const line = (cells) => `| ${cells.join(' | ')} |`;
   const rows = [];
-  for (let i = 0; i < items.length; i += 2) {
-    const [a, b] = [items[i], items[i + 1]];
-    rows.push(`| ${cell(a, i)} | ${cell(b, i + 1)} |`, ...(i === 0 ? ['| --- | --- |'] : []), `| ${media(a)} | ${media(b)} |`);
+  for (let i = 0; i < items.length; i += columns) {
+    const group = Array.from({length: columns}, (_, j) => items[i + j]);
+    rows.push(line(group.map((r, j) => cell(r, i + j))), ...(i === 0 ? [line(group.map(() => '---'))] : []), line(group.map(media)));
   }
   return rows.join('\n');
 }
