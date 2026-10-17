@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // cliphou.se helper for coding agents. Node 18+, no dependencies.
-// Commands: search, spec, logo, tailor, animate, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
+// Commands: search, spec, fit, logo, tailor, animate, preview, link, pick, picker. Set CLIPHOUSE_ORIGIN to test against another host.
 import {writeFileSync, mkdtempSync, readFileSync, mkdirSync, existsSync, statSync} from 'node:fs';
 import {tmpdir, homedir} from 'node:os';
 import {extname, join} from 'node:path';
@@ -245,6 +245,7 @@ async function spec([id]) {
   console.log(JSON.stringify({
     id: s.id, title: s.title, format: s.format, templateVersion: s.templateVersion,
     editableFields: s.editableFields, props: s.props, music: s.music ?? null,
+    ...(s.fixedSampleContent ? {fixedSampleContent: s.fixedSampleContent} : {}),
     handoff: s.handoff?.urlTemplate, credit: s.credit, instructions, fullSpec: `${ORIGIN}/templates/${id}/agent.json`,
   }, null, 2));
 }
@@ -258,17 +259,52 @@ async function link([id, file]) {
   console.log(JSON.parse(text).url);
 }
 
-// Render the filled template on the server and save the poster locally, so the chat can show it inline.
+// Check copy against each template's text limits before rendering. With a brand file it checks the brand fields;
+// with a props file it checks every text. Prints the fields that are too long, so the agent rewrites them once.
+async function fitCommand(args) {
+  const brandIndex = args.indexOf('--brand');
+  const brandFile = brandIndex >= 0 ? args[brandIndex + 1] : null;
+  const rest = args.filter((a, i) => brandIndex < 0 || (i !== brandIndex && i !== brandIndex + 1));
+  const ids = rest.filter((a) => ID.test(a));
+  const propsFile = rest.find((a) => !ID.test(a));
+  if (!ids.length || ids.length > 4 || (!brandFile === !propsFile) || (propsFile && ids.length !== 1)) {
+    die('usage: fit <id1> [id2 id3 id4] --brand <brand.json>  |  fit <id> <props.json>');
+  }
+  const read = (f) => JSON.parse(f === '-' ? readFileSync(0, 'utf8') : readFileSync(f, 'utf8'));
+  const source = brandFile ? read(brandFile) : read(propsFile);
+  // Brand fields map onto the shared text roles; points fill point1-point3.
+  const brandTexts = (b) => ({brand: b.name, headline: b.headline, subhead: b.subhead, cta: b.cta, date: b.date,
+    point1: b.points?.[0], point2: b.points?.[1], point3: b.points?.[2]});
+  const results = [];
+  for (const id of ids) {
+    const s = await get(`/templates/${id}/agent.json`).catch(() => null);
+    if (!s?.editableFields?.texts) die(`unknown template ${id}`);
+    const texts = brandFile ? brandTexts(source) : source.texts ?? {};
+    const tooLong = Object.entries(s.editableFields.texts)
+      .filter(([role, f]) => typeof texts[role] === 'string' && texts[role].length > f.maxLength)
+      .map(([role, f]) => ({role, text: texts[role], length: texts[role].length, maxLength: f.maxLength}));
+    const unused = brandFile ? Object.keys(texts).filter((r) => texts[r] && !s.editableFields.texts[r]) : undefined;
+    results.push({id, title: s.title, ok: !tooLong.length, tooLong,
+      limits: Object.fromEntries(Object.entries(s.editableFields.texts).map(([role, f]) => [role, f.maxLength])),
+      ...(unused?.length ? {unused} : {}),
+      ...(s.fixedSampleContent ? {fixedSampleContent: s.fixedSampleContent.items} : {})});
+  }
+  console.log(JSON.stringify({ok: results.every((r) => r.ok), results}, null, 2));
+}
+
+// Render the filled template on the server and save the poster and an animated loop locally, so the chat shows it inline.
 async function preview(args) {
+  const loop = !args.includes('--no-loop');
+  args = args.filter((a) => a !== '--no-loop');
   const outIndex = args.indexOf('--out');
   const out = outIndex >= 0 ? args[outIndex + 1] : null;
   const [id, file] = args.filter((a, i) => outIndex < 0 || (i !== outIndex && i !== outIndex + 1));
-  if (!ID.test(id ?? '') || !file) die('usage: preview <template-id> <props.json | -> [--out <file.html>]');
+  if (!ID.test(id ?? '') || !file) die('usage: preview <template-id> <props.json | -> [--no-loop] [--out <file.html>]');
   const props = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
   const started = Date.now();
   let result;
   try {
-    result = await mcp('render_preview', {variantId: id, props, searchId: lastSearch()}, 40_000);
+    result = await mcp('render_preview', {variantId: id, props, ...(loop ? {loop: true} : {}), searchId: lastSearch()}, loop ? 70_000 : 40_000);
     // Servers without render_preview answer with a tool error. Fall back to the editor link.
     if (result.isError && /not found|unknown tool/i.test(result.text)) throw new Error('render_preview not found');
   }
@@ -285,6 +321,8 @@ async function preview(args) {
   }
   if (result.isError) die(`props rejected: ${result.text}`);
   const data = JSON.parse(result.text);
+  // A loop not ready within the server's wait keeps rendering there; the poster is shown now and a
+  // later preview of the same props picks the loop up from the cache.
   let local = null;
   // Cache the poster only when it is a personalized poster from <origin>/p/<sha256>.jpg.
   const name = typeof data.poster === 'string' && data.poster.startsWith(`${ORIGIN}/p/`) ? data.poster.split('/').pop() : '';
@@ -298,7 +336,9 @@ async function preview(args) {
     }
   }
   const title = (await get(`/templates/${id}/agent.json`).catch(() => null))?.title ?? id;
-  const markdown = local ? `![${title.replace(/[\]|]/g, '')}](${local})` : undefined;
+  const animated = data.video ? await saveLoop(data.video) : null;
+  const shown = animated ?? local;
+  const markdown = shown ? `![${title.replace(/[\]|]/g, '')}](${shown})` : undefined;
   let reference;
   if (out && local) {
     const src = `data:image/jpeg;base64,${readFileSync(local).toString('base64')}`;
@@ -316,8 +356,8 @@ async function preview(args) {
 `);
     reference = vizRef(out);
   }
-  console.log(JSON.stringify({poster: data.poster, local, editor: data.editor, video: data.video ?? null, markdown, reference,
-    message: data.message, seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
+  console.log(JSON.stringify({poster: data.poster, local, animated: Boolean(animated), localLoop: animated, editor: data.editor, video: data.video ?? null,
+    markdown, reference, message: data.message, seconds: Math.round((Date.now() - started) / 100) / 10}, null, 2));
   if (reference) console.log(reference);
 }
 
@@ -380,15 +420,22 @@ async function logo(args) {
 // Render the shortlisted templates with the project's brand, so the grid already shows the user's product.
 // Writes cliphouse/<id>.props.json for each template, so the fill step starts from the tailored props.
 async function tailor(args) {
-  // Step 1: posters now, loops start rendering on the server. Step 2 is `animate`.
+  // By default it waits for the animated loops too, so the grid animates in one step. --fast prints the
+  // posters at once and leaves the loops rendering for `animate`. --no-loop skips loops entirely.
   const loop = !args.includes('--no-loop');
-  args = args.filter((a) => a !== '--no-loop');
+  const fast = args.includes('--fast');
+  args = args.filter((a) => a !== '--no-loop' && a !== '--fast');
   const brandIndex = args.indexOf('--brand');
   const file = brandIndex >= 0 ? args[brandIndex + 1] : null;
   const ids = args.filter((a, i) => brandIndex < 0 || (i !== brandIndex && i !== brandIndex + 1));
-  if (!file || !ids.length || ids.length > 4 || ids.some((id) => !ID.test(id))) die('usage: tailor <id1> [id2 id3 id4] --brand <brand.json | -> [--no-loop]');
+  if (!file || !ids.length || ids.length > 4 || ids.some((id) => !ID.test(id))) die('usage: tailor <id1> [id2 id3 id4] --brand <brand.json | -> [--fast | --no-loop]');
   const brand = JSON.parse(file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8'));
-  await gallery(ids, brand, loop ? 'start' : undefined, 40_000);
+  if (!loop) return void await gallery(ids, brand, undefined, 40_000);
+  // Posters first and loops queued, quietly; then one wait for the loops (up to about 45 s on the server)
+  // and the grid is printed once. Loops still rendering finish on the server for a later `animate`.
+  const done = await gallery(ids, brand, 'start', 40_000, !fast);
+  if (fast || done) return;
+  await gallery(ids, brand, true, 70_000);
 }
 
 // Step 2: wait for the loops started by `tailor` and print the grid again, animated. It reuses the brand
@@ -407,7 +454,7 @@ async function animate(args) {
 }
 
 // Prints the grid and returns true when nothing is left rendering. With quiet, an unfinished
-// result is not printed, so the caller can try again and print once.
+// result is not printed (the props files are still written), so the caller can try again and print once.
 async function gallery(ids, brand, loop, timeout, quiet = false) {
   const started = Date.now();
   let result;
@@ -433,7 +480,8 @@ async function gallery(ids, brand, loop, timeout, quiet = false) {
     const propsFile = join('cliphouse', `${r.id}.props.json`);
     writeFileSync(propsFile, `${JSON.stringify(r.props, null, 2)}\n`);
     items.push({id: r.id, title: r.title, aspect: r.aspect, tailored: Boolean(local || animated), animated: Boolean(animated), pending: Boolean(r.videoPending),
-      localPreview: animated ?? local ?? fallback, preview: r.stockPoster, editor: r.editor, propsFile, keptSample: r.keptSample ?? []});
+      localPreview: animated ?? local ?? fallback, preview: r.stockPoster, editor: r.editor, propsFile, keptSample: r.keptSample ?? [],
+      shortened: r.shortened ?? [], ...(r.fixedSampleContent ? {fixedSampleContent: r.fixedSampleContent} : {})});
   }
   // loops: "rendering" means `animate` should run next; "none" means skip it (old server, --no-loop, or failed loops).
   const loops = items.some((i) => i.pending) ? 'rendering' : items.some((i) => i.animated) ? 'ready' : 'none';
@@ -482,6 +530,6 @@ button,a{font:inherit;color:#eceae4;background:#262a31;border:1px solid #333944;
 }
 
 const [command, ...rest] = process.argv.slice(2);
-const commands = {search, spec, logo, tailor, animate, preview, link, pick, picker};
-if (!commands[command]) die('usage: cliphouse.mjs <search|spec|logo|tailor|animate|preview|link|pick|picker> ...');
+const commands = {search, spec, fit: fitCommand, logo, tailor, animate, preview, link, pick, picker};
+if (!commands[command]) die('usage: cliphouse.mjs <search|spec|fit|logo|tailor|animate|preview|link|pick|picker> ...');
 commands[command](rest).catch((e) => die(/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|abort/i.test(`${e.message} ${e.cause?.code ?? ''}`) ? `cannot reach ${ORIGIN}. Check the network and try again.` : e.message));

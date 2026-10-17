@@ -78,7 +78,7 @@ In Codex, type `$cliphouse` to call the skill directly.
 | --- | --- |
 | Template grid in the chat that already shows your product, with short animated previews | Available |
 | Filling the template from your repo, and editing it by prompt | Available. You get a cliphou.se editor link, where you export the MP4. |
-| A preview of your own product in the picked template | Available as a poster image. An animated preview is coming. |
+| A preview of your own product in the picked template | Available as a 4-second animated loop, with a poster image as a fallback. |
 | Posting to X from the agent | Coming soon. Today the agent writes the caption and opens the X post window for you to attach the MP4. |
 
 ## Skills in this repo
@@ -100,9 +100,10 @@ The cliphou.se deploy checks this skill against its MCP contract. If the install
 | --- | --- |
 | `search --goal <goal> "<query>" [--aspect 9:16] [--max-seconds 20] [--inline]` | Finds templates for a marketing goal. `--inline` caches the preview MP4s and prints a Markdown grid. |
 | `logo [file]` | Uploads the project's logo (found automatically, or the file you name) and adds it to `cliphouse/brand.json`. Release and developer templates show it in place of the brand name. |
-| `tailor <id>... --brand <brand.json>` | Renders up to 4 templates with your brand in one server call, writes `cliphouse/<id>.props.json` for each, and prints a Markdown grid of the posters. |
+| `fit <id>... --brand <brand.json>` or `fit <id> <props.json>` | Checks your copy against each template's text limits before rendering, and lists the fields that are too long. |
+| `tailor <id>... --brand <brand.json>` | Renders up to 4 templates with your brand on the server, writes `cliphouse/<id>.props.json` for each, and prints a Markdown grid of 4-second animated loops. `--fast` prints the posters first. |
 | `spec <id>` | Prints the editable text, colors, and limits. |
-| `preview <id> <props.json>` | Renders a poster of your product in the template on the server, and prints the editor link. |
+| `preview <id> <props.json>` | Renders an animated loop and a poster of your product in the template on the server, and prints the editor link. |
 | `link <id> <props.json>` | Validates the edit and prints a cliphou.se editor link. |
 | `pick <id>...` | Writes a side-by-side preview page for terminals and prints its path. The agent asks before opening it. |
 
@@ -112,7 +113,7 @@ What the default skill does not do:
 - It does not download source packages into your repo.
 - It does not open your browser on its own.
 
-It caches stock previews only from `https://cliphou.se/previews/` and personalized posters only from `https://cliphou.se/p/<hash>.jpg`, in `~/.cache/cliphouse`. Set `CLIPHOUSE_ORIGIN` to use another host.
+It caches stock previews only from `https://cliphou.se/previews/` and personalized posters and loops only from `https://cliphou.se/p/<hash>.jpg` and `.webp`, in `~/.cache/cliphouse`. Set `CLIPHOUSE_ORIGIN` to use another host.
 
 In the Codex picker, a click on a tile sends one fixed message: `$cliphouse: use template <id> and fill it for this project`. It is sent only on your click, and the id must match `^[a-z0-9-]+$`.
 
