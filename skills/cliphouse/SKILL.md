@@ -9,7 +9,7 @@ cliphou.se turns what the user builds into marketing videos. It uses editable mo
 
 Most users are developers and small teams with no marketer. Act as their marketer: find the selling points, pick the angle, and write copy that sells. Do not just copy the README.
 
-Contract version: `2026-10-18.1`.
+Contract version: `2026-10-19.1`.
 
 Helper: `node <skill-dir>/scripts/cliphouse.mjs <command>`. `<skill-dir>` is the directory that contains this file.
 
@@ -31,7 +31,11 @@ What the helper does:
    - **Problem:** the pain they feel before using it.
    - **What shipped:** the one change this video is about.
    - **Angle and hook:** one of a pain ("Still writing YAML?"), a question, a number ("0 config files"), or a before/after.
-   Write `headline` as the hook, `subhead` as who it is for and what it solves, and `points` as benefits backed by real features ("Search is 3x faster", not "New search index"). Use only facts from the project: never invent numbers, customers, or quotes. Tell the user the angle in one line before the grid, so they can redirect it.
+   Write `headline` as the hook, `subhead` as who it is for and what it solves, and `points` as benefits backed by real features ("Search is 3x faster", not "New search index"). Use only facts from the project: never invent numbers, customers, or quotes. **Show the marketing work.** Choose exactly two marketing jobs for this project. The first is an analysis job. The second is a shaping job.
+   - Analysis: `pick-highlights` (choose the release changes worth showing), `explain-product` (state what the project does), or `find-proof` (select real numbers, benchmarks, or quotes).
+   - Shaping: `fit-audience` (write for its users), `features-to-benefits` (say what each change gives the user), `choose-hook` (open with a problem, question, real number, or before-and-after), or `set-next-step` (choose install, upgrade, join, or try).
+   - Defaults: launch, brand, waitlist, event, and hiring use `explain-product`; feature, update, integration, pricing, and promotion use `pick-highlights`; milestone and social proof use `find-proof`. Then choose the shaping job that best fits the request.
+   Use a job only when the project has facts for it. When the user already gave the audience or angle, choose another shaping job. Write each job as one present-tense bullet about this project, with no claim or sales copy, for example "Finding the most important 2.1 changes" and "Framing 2.1 around less admin for small teams".
 2. **Find release moments, choose the goal, and search.** Read the release for two or three shareable moments. Name a moment only when the project has facts for it. Suggest the strongest moment to the user in one line:
    - `most-requested-feature`: a feature users clearly asked for has shipped.
    - `generally-available`: a feature or product is now available to everyone or out of beta.
@@ -68,14 +72,15 @@ What the helper does:
    It writes `cliphouse/<id>.props.json` for each template, waits for 4-second animated loops of each option, and prints a `markdown` grid of the loops. It takes up to about a minute; tell the user the previews are rendering before you run it. Do not run `animate` after it.
    - If `loops` is `"rendering"` (a loop was not ready in time), use the grid as given, and run `animate <id1> <id2> <id3>` after the user picks, or when they ask to see motion.
    - `shortened` lists brand texts the server still had to cut (`from`, `to`, `max`). Rewrite those in step 4.
-   - **Editor links first.** Start the reply with the `links` field exactly as given: a numbered list of the options, each title linked to its editor. The editor plays the full video at full quality on every device, including phones, where inline loops often do not play.
+   - **Marketing work first.** Start the reply with the files or sources you read, the two job bullets, and one short result line, such as "Created three release videos". Do not repeat the product name in that line.
+   - **Editor links next.** Then give the `links` field exactly as given: a numbered list of the options, each title linked to its editor. The editor plays the full video at full quality on every device, including phones, where inline loops often do not play.
    - **Markdown grid (Codex desktop and other apps that render media).** Then copy the `markdown` field into your reply exactly as given. It is a table with up to 3 options per row, showing titles and animated loops (or posters) of the user's product. Do not wrap it in a code block, and do not change the paths. Do not use a `visualize` reference.
    - When `animated` is false, the grid shows still posters. Do not mention it.
    - When `tailored` is false, the grid shows stock previews instead. Say so in one short line.
    - Add `--fast` to `tailor` only when the user asks for speed over motion. It prints posters at once and leaves the loops rendering; run `animate` next. Add `--no-loop` when the host cannot show images.
    - **Terminal only (no inline media).** List the options as a numbered list with title, aspect, length, and the `page` link. Do not show the rendering engine. Then ask if the user wants a side-by-side preview page in the browser. Only when they say yes, run `node <skill-dir>/scripts/cliphouse.mjs pick <id1> <id2> <id3>`. It prints a file path and does not open it. Open it only with the user's permission, or give them the path.
 
-   Under the grid, add at most one short line on why these fit. Ask the user to reply with a number.
+   Ask the user to reply with a number.
 4. **Fill the template.** Run `node <skill-dir>/scripts/cliphouse.mjs spec <id>`. Start from `cliphouse/<id>.props.json`, which `tailor` already filled. Its `keptSample` list names the text fields that still hold the template's sample text: replace those with real facts from the project, or tell the user which ones you could not fill. Rewrite every field in `shortened`. Write each field for its role in this template (the hook, the proof, the benefit, the CTA), with the angle from step 1. Change only `props.texts`, `props.theme`, and `props.media` (and `hidden`/`audio` for music templates). Keep every text within its `maxLength` and every color as `#RRGGBB`. Write the props back to `cliphouse/<id>.props.json`, then run `fit <id> cliphouse/<id>.props.json` and fix anything it lists. When you change the copy, update the matching fields in `cliphouse/brand.json` too, so the next video starts from the approved copy.
 5. **Show their product in the template.** Render a personalized preview on the server. It returns an animated loop of the filled template and its poster, usually in about 10 seconds, with no local install:
    - `node <skill-dir>/scripts/cliphouse.mjs preview <id> cliphouse/<id>.props.json`. Copy its `markdown` field into your reply exactly as given.

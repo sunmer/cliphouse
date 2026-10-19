@@ -6,7 +6,7 @@ import {tmpdir, homedir} from 'node:os';
 import {extname, join} from 'node:path';
 
 const ORIGIN = (process.env.CLIPHOUSE_ORIGIN || 'https://cliphou.se').replace(/\/$/, '');
-const CONTRACT_VERSION = '2026-10-18.1';
+const CONTRACT_VERSION = '2026-10-19.1';
 const GOALS = ['launch-product', 'announce-feature', 'share-update', 'grow-waitlist', 'announce-integration', 'announce-pricing',
   'celebrate-milestone', 'share-social-proof', 'promote-event', 'introduce-brand', 'run-promotion', 'hire-team'];
 const MOMENTS = ['most-requested-feature', 'generally-available', 'limit-raised', 'faster', 'manual-step-removed', 'integration-live',
