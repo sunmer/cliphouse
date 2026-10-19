@@ -4,11 +4,9 @@
 
 Your coding agent turns every release into a video for your socials. It finds the selling points, picks the angle, writes the copy, and uses your brand colors and logo. Free skill and MCP server for Claude Code, Codex, Cursor, Claude, and ChatGPT.
 
+![A coding agent reads project files, finds what to highlight, and returns three animated video previews for a release and a product explainer](https://raw.githubusercontent.com/sunmer/cliphouse/main/assets/cliphouse-agent-workflow.gif)
+
 You can preview and edit without an account. MP4 download and editing more than 3 gallery templates need a free Google sign-in.
-
-[![Demo: a coding agent suggests release video templates, the user picks one, and the agent fills it from the repo](demo.gif)](https://github.com/sunmer/cliphouse/releases/download/demo-v1/cliphouse-agent-demo.mp4)
-
-[Watch the full demo (31 seconds)](https://github.com/sunmer/cliphouse/releases/download/demo-v1/cliphouse-agent-demo.mp4), or see it play at [cliphou.se/agents](https://cliphou.se/agents/). Some steps in it are coming soon. See [Status](#status).
 
 ## Install
 
@@ -58,7 +56,7 @@ Codex with MCP, in `~/.codex/config.toml`:
 url = "https://cliphou.se/mcp"
 ```
 
-GitHub does not open `cursor://` and `vscode:` links from a README in every browser. If a link does nothing, use the buttons on [cliphou.se/agents](https://cliphou.se/agents/).
+GitHub does not open `cursor://` and `vscode:` links from a README in every browser. If a link does nothing, add the MCP server URL manually.
 
 ## Try it
 
@@ -74,7 +72,7 @@ In Codex, type `$cliphouse` to call the skill directly.
 
 ## Status
 
-| In the demo | Status |
+| Feature | Status |
 | --- | --- |
 | Template grid in the chat that already shows your product, with short animated previews | Available |
 | Filling the template from your repo, and editing it by prompt | Available. You get a cliphou.se editor link, where you export the MP4. |
@@ -121,7 +119,6 @@ In the Codex picker, a click on a tile sends one fixed message: `$cliphouse: use
 
 ## Links
 
-- [cliphou.se/agents](https://cliphou.se/agents/): install page with the demo
 - [MCP Registry entry](https://registry.modelcontextprotocol.io/v0.1/servers?search=se.cliphou%2Ftemplates) (`se.cliphou/templates`)
 - [llms.txt](https://cliphou.se/llms.txt)
 - [Gallery](https://cliphou.se/)
