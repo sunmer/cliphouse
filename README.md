@@ -119,6 +119,7 @@ In the Codex picker, a click on a tile sends one fixed message: `$cliphouse: use
 
 ## Links
 
+- [MCP docs](https://cliphou.se/mcp-docs/): install options, tools, limits, and the workflow video
 - [MCP Registry entry](https://registry.modelcontextprotocol.io/v0.1/servers?search=se.cliphou%2Ftemplates) (`se.cliphou/templates`)
 - [llms.txt](https://cliphou.se/llms.txt)
 - [Gallery](https://cliphou.se/)
